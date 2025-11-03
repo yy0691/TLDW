@@ -105,29 +105,30 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
       const duration = await getVideoDuration();
       setUploadProgress(10);
 
-      // If subtitle file is provided, use the old flow
+      // Upload video
+      const videoFormData = new FormData();
+      videoFormData.append('video', videoFile);
+      videoFormData.append('title', title.trim());
+      videoFormData.append('author', author.trim() || 'Local Upload');
+      videoFormData.append('duration', duration.toString());
+
+      const videoResponse = await fetch('/api/local/upload-video', {
+        method: 'POST',
+        body: videoFormData
+      });
+
+      if (!videoResponse.ok) {
+        const errorData = await videoResponse.json();
+        throw new Error(errorData.error || 'Failed to upload video');
+      }
+
+      const videoData = await videoResponse.json();
+      setUploadProgress(60);
+
+      let transcript;
+
       if (subtitleFile) {
-        // Upload video
-        const videoFormData = new FormData();
-        videoFormData.append('video', videoFile);
-        videoFormData.append('title', title.trim());
-        videoFormData.append('author', author.trim() || 'Local Upload');
-        videoFormData.append('duration', duration.toString());
-
-        const videoResponse = await fetch('/api/local/upload-video', {
-          method: 'POST',
-          body: videoFormData
-        });
-
-        if (!videoResponse.ok) {
-          const errorData = await videoResponse.json();
-          throw new Error(errorData.error || 'Failed to upload video');
-        }
-
-        const videoData = await videoResponse.json();
-        setUploadProgress(60);
-
-        // Upload subtitle
+        // User provided subtitle file - use it
         const subtitleFormData = new FormData();
         subtitleFormData.append('subtitle', subtitleFile);
         subtitleFormData.append('videoId', videoData.videoId);
@@ -143,32 +144,32 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
         }
 
         const subtitleData = await subtitleResponse.json();
-        setUploadProgress(100);
-
-        // Call completion handler
-        onUploadComplete(videoData.videoId, subtitleData.transcript);
+        transcript = subtitleData.transcript;
       } else {
-        // No subtitle file - use automatic recognition
-        const formData = new FormData();
-        formData.append('video', videoFile);
-        formData.append('language', 'en');
+        // No subtitle file - extract audio and transcribe locally
+        // This will use a local transcription service (not OpenAI)
+        const transcribeFormData = new FormData();
+        transcribeFormData.append('videoUrl', videoData.url);
+        transcribeFormData.append('videoId', videoData.videoId);
 
-        const response = await fetch('/api/upload-video', {
+        const transcribeResponse = await fetch('/api/local/transcribe-video', {
           method: 'POST',
-          body: formData
+          body: transcribeFormData
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.details || errorData.error || 'Failed to process video');
+        if (!transcribeResponse.ok) {
+          const errorData = await transcribeResponse.json();
+          throw new Error(errorData.error || 'Failed to transcribe video. Please provide a subtitle file.');
         }
 
-        const data = await response.json();
-        setUploadProgress(100);
-
-        // Call completion handler
-        onUploadComplete(data.videoId, data.transcript);
+        const transcribeData = await transcribeResponse.json();
+        transcript = transcribeData.transcript;
       }
+
+      setUploadProgress(100);
+
+      // Call completion handler
+      onUploadComplete(videoData.videoId, transcript);
 
       // Reset form
       setVideoFile(null);
@@ -261,7 +262,7 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
             className="hidden"
           />
           <p className="text-xs text-muted-foreground">
-            Supported: SRT, VTT. If not provided, subtitles will be auto-generated using AI.
+            Supported: SRT, VTT. If not provided, will attempt local transcription.
           </p>
         </div>
 

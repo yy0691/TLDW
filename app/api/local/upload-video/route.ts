@@ -101,4 +101,11 @@ async function handler(request: NextRequest) {
   }
 }
 
-export const POST = withSecurity(handler, SECURITY_PRESETS.AUTHENTICATED);
+// Configure route to accept large file uploads (500MB)
+export const runtime = 'nodejs';
+export const maxDuration = 300; // 5 minutes timeout
+
+export const POST = withSecurity(handler, {
+  ...SECURITY_PRESETS.PUBLIC,
+  maxBodySize: 500 * 1024 * 1024, // 500MB for video uploads
+});

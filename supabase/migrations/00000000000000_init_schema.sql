@@ -168,7 +168,7 @@ BEGIN
     INSERT INTO user_videos (user_id, video_id, accessed_at)
     VALUES (p_user_id, v_video_id, NOW())
     ON CONFLICT (user_id, video_id) DO UPDATE SET
-      accessed_at = NOW();
+      accessed_at = EXCLUDED.accessed_at;
   END IF;
 
   RETURN QUERY SELECT v_video_id, v_is_new;
