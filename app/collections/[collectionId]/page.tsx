@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Play, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { toast } from "sonner";
 import { formatDuration, formatTopicDuration } from "@/lib/utils";
 import type { CollectionWithVideos } from "@/lib/types";
+import { fetchCollection, removeVideoFromCollection } from "@/lib/collections-client";
 
 interface CollectionPageProps {
   params: Promise<{ collectionId: string }>;
@@ -21,23 +23,18 @@ export default function CollectionPage({ params }: CollectionPageProps) {
   useEffect(() => {
     params.then((p) => {
       setCollectionId(p.collectionId);
-      fetchCollection(p.collectionId);
+      loadCollection(p.collectionId);
     });
   }, [params]);
 
-  const fetchCollection = async (id: string) => {
+  const loadCollection = async (id: string) => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/collections/${id}`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch collection');
-      }
-
-      const data = await response.json();
+      const data = await fetchCollection(id);
       setCollection(data);
     } catch (error) {
       console.error('Error fetching collection:', error);
+      toast.error("Failed to load collection");
       router.push('/collections');
     } finally {
       setIsLoading(false);
@@ -48,20 +45,13 @@ export default function CollectionPage({ params }: CollectionPageProps) {
     if (!confirm('Remove this video from the collection?')) return;
 
     try {
-      const response = await fetch(`/api/collections/${collectionId}/videos`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoAnalysisId: videoId })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to remove video');
-      }
-
+      await removeVideoFromCollection(collectionId, videoId);
+      toast.success("Video removed from collection");
       // Refresh collection
-      await fetchCollection(collectionId);
+      await loadCollection(collectionId);
     } catch (error) {
       console.error('Error removing video:', error);
+      toast.error("Failed to remove video");
     }
   };
 

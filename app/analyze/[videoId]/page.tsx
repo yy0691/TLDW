@@ -8,6 +8,7 @@ import { ThemeSelector } from "@/components/theme-selector";
 import { LoadingContext } from "@/components/loading-context";
 import { LoadingTips } from "@/components/loading-tips";
 import { VideoSkeleton } from "@/components/video-skeleton";
+import { VideoHeader } from "@/components/video-header";
 import Link from "next/link";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { Topic, TranscriptSegment, VideoInfo, Citation, PlaybackCommand, Note, NoteSource, NoteMetadata, TopicCandidate, TopicGenerationMode } from "@/lib/types";
@@ -1609,6 +1610,13 @@ export default function AnalyzePage() {
             {/* Left Column - Video (2/3 width) */}
             <div className="lg:col-span-2">
               <div className="sticky top-[6.5rem] space-y-3.5" id="video-container">
+                {videoInfo && (
+                  <VideoHeader
+                    videoInfo={videoInfo}
+                    videoId={videoId}
+                    isFavorite={false}
+                  />
+                )}
                 <YouTubePlayer
                   videoId={videoId}
                   selectedTopic={selectedTopic}

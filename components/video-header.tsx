@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { VideoInfo } from "@/lib/types";
 import { formatDuration } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Star, Clock, User, Loader2 } from "lucide-react";
+import { Star, Clock, User, Loader2, FolderPlus } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
+import { AddToCollectionDialog } from "@/components/add-to-collection-dialog";
 
 interface VideoHeaderProps {
   videoInfo: VideoInfo;
@@ -25,6 +26,27 @@ export function VideoHeader({
   const { user } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
   const [favoriteStatus, setFavoriteStatus] = useState(isFavorite);
+  const [showCollectionDialog, setShowCollectionDialog] = useState(false);
+  const [videoAnalysisId, setVideoAnalysisId] = useState<string | null>(null);
+
+  // Fetch video analysis ID when component mounts
+  useEffect(() => {
+    const fetchAnalysisId = async () => {
+      try {
+        const response = await fetch(`/api/video-analysis-id?youtubeId=${videoId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setVideoAnalysisId(data.id);
+        }
+      } catch (error) {
+        console.error("Failed to fetch video analysis ID:", error);
+      }
+    };
+
+    if (videoId && user) {
+      fetchAnalysisId();
+    }
+  }, [videoId, user]);
 
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -84,26 +106,45 @@ export function VideoHeader({
         </div>
 
         {user && (
-          <Button
-            variant={favoriteStatus ? "default" : "outline"}
-            size="sm"
-            onClick={handleToggleFavorite}
-            disabled={isUpdating}
-            className="flex-shrink-0"
-          >
-            {isUpdating ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Star
-                className={`h-3.5 w-3.5 ${favoriteStatus ? 'fill-current' : ''}`}
-              />
-            )}
-            <span className="ml-1.5">
-              {favoriteStatus ? 'Favorited' : 'Favorite'}
-            </span>
-          </Button>
+          <div className="flex gap-2 flex-shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCollectionDialog(true)}
+              disabled={!videoAnalysisId}
+            >
+              <FolderPlus className="h-3.5 w-3.5" />
+              <span className="ml-1.5">Add to Collection</span>
+            </Button>
+            <Button
+              variant={favoriteStatus ? "default" : "outline"}
+              size="sm"
+              onClick={handleToggleFavorite}
+              disabled={isUpdating}
+            >
+              {isUpdating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Star
+                  className={`h-3.5 w-3.5 ${favoriteStatus ? 'fill-current' : ''}`}
+                />
+              )}
+              <span className="ml-1.5">
+                {favoriteStatus ? 'Favorited' : 'Favorite'}
+              </span>
+            </Button>
+          </div>
         )}
       </div>
+
+      {videoAnalysisId && (
+        <AddToCollectionDialog
+          open={showCollectionDialog}
+          onOpenChange={setShowCollectionDialog}
+          videoId={videoAnalysisId}
+          videoTitle={videoInfo.title}
+        />
+      )}
     </Card>
   );
 }
