@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractVideoId } from '@/lib/utils';
 import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
+import { getWhisperClient } from '@/lib/whisper-client';
+import { extractAudioFromYouTube, cleanupAudioFile } from '@/lib/audio-extractor';
 
 async function handler(request: NextRequest) {
   try {
-    const { url } = await request.json();
+    const { url, autoFallback = true } = await request.json();
 
     if (!url) {
       return NextResponse.json(
@@ -183,9 +185,47 @@ async function handler(request: NextRequest) {
       }
     } catch (fetchError) {
       const errorMessage = fetchError instanceof Error ? fetchError.message : '';
+      
+      // If transcript fetch failed and auto-fallback is enabled, try Whisper
+      if (autoFallback && process.env.OPENAI_API_KEY) {
+        console.log(`[Transcript] Supadata failed, attempting Whisper fallback for video: ${videoId}`);
+        
+        let audioPath: string | null = null;
+        try {
+          // Extract audio and transcribe with Whisper
+          audioPath = await extractAudioFromYouTube(videoId, {
+            maxDuration: 7200,
+            format: 'mp3',
+            sampleRate: 16000,
+          });
+          
+          const whisperClient = getWhisperClient();
+          const whisperTranscript = await whisperClient.transcribe(audioPath, 'en');
+          
+          console.log(`[Transcript] Whisper fallback successful: ${whisperTranscript.length} segments`);
+          
+          return NextResponse.json({
+            videoId,
+            transcript: whisperTranscript,
+            source: 'whisper',
+            fallback: true,
+          });
+        } catch (whisperError) {
+          console.error('[Transcript] Whisper fallback also failed:', whisperError);
+          // Continue to original error handling
+        } finally {
+          if (audioPath) {
+            cleanupAudioFile(audioPath);
+          }
+        }
+      }
+      
       if (errorMessage.includes('404')) {
         return NextResponse.json(
-          { error: 'No transcript/captions available for this video. The video may not have subtitles enabled.' },
+          { 
+            error: 'No transcript/captions available for this video. The video may not have subtitles enabled.',
+            canAutoGenerate: !!process.env.OPENAI_API_KEY,
+          },
           { status: 404 }
         );
       }
@@ -193,8 +233,45 @@ async function handler(request: NextRequest) {
     }
     
     if (!transcriptSegments || transcriptSegments.length === 0) {
+      // If no transcript found and auto-fallback is enabled, try Whisper
+      if (autoFallback && process.env.OPENAI_API_KEY) {
+        console.log(`[Transcript] No segments found, attempting Whisper fallback for video: ${videoId}`);
+        
+        let audioPath: string | null = null;
+        try {
+          // Extract audio and transcribe with Whisper
+          audioPath = await extractAudioFromYouTube(videoId, {
+            maxDuration: 7200,
+            format: 'mp3',
+            sampleRate: 16000,
+          });
+          
+          const whisperClient = getWhisperClient();
+          const whisperTranscript = await whisperClient.transcribe(audioPath, 'en');
+          
+          console.log(`[Transcript] Whisper fallback successful: ${whisperTranscript.length} segments`);
+          
+          return NextResponse.json({
+            videoId,
+            transcript: whisperTranscript,
+            source: 'whisper',
+            fallback: true,
+          });
+        } catch (whisperError) {
+          console.error('[Transcript] Whisper fallback also failed:', whisperError);
+          // Continue to original error handling
+        } finally {
+          if (audioPath) {
+            cleanupAudioFile(audioPath);
+          }
+        }
+      }
+      
       return NextResponse.json(
-        { error: 'No transcript available for this video' },
+        { 
+          error: 'No transcript available for this video',
+          canAutoGenerate: !!process.env.OPENAI_API_KEY,
+        },
         { status: 404 }
       );
     }

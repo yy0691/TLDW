@@ -8,6 +8,7 @@ The project is a Next.js 15 + React 19 application that wraps Google Gemini 2.5 
 
 ## Feature Highlights
 
+- **Automatic subtitle recognition** for videos without captions using OpenAI Whisper, with support for YouTube videos and local uploads.
 - AI highlight reels with Smart (quality) and Fast (speed) generation modes, Play All playback, and theme-based re-generation.
 - Gemini-powered quick preview, structured summary, suggested questions, and memorable quotes surfaced in parallel.
 - AI chat grounded in the transcript with structured JSON responses, timestamp citations, and fallbacks when Gemini rate-limits.
@@ -39,6 +40,7 @@ The project is a Next.js 15 + React 19 application that wraps Google Gemini 2.5 
 
 - Video ingestion: `/api/video-info`, `/api/transcript`, `/api/check-video-cache`, `/api/video-analysis`, `/api/save-analysis`, `/api/update-video-analysis`, `/api/link-video`.
 - AI generation: `/api/generate-topics`, `/api/generate-summary`, `/api/quick-preview`, `/api/suggested-questions`, `/api/top-quotes`.
+- Automatic subtitle generation: `/api/auto-subtitle` (YouTube videos), `/api/upload-video` (local video files with auto-transcription).
 - Conversational tools: `/api/chat` (Gemini chat with citations) and `/api/check-limit` for pre-flight rate checks.
 - User data: `/api/notes`, `/api/notes/all`, `/api/toggle-favorite`.
 - Security utilities: `/api/csrf-token` and the shared `withSecurity` middleware (allowed methods, rate limits, CSRF validation).
@@ -105,6 +107,7 @@ Create `.env.local` in the repo root:
 | --- | --- | --- |
 | `GEMINI_API_KEY` | yes | Google Gemini API key (2.5 models) |
 | `SUPADATA_API_KEY` | yes | Supadata transcript API key |
+| `OPENAI_API_KEY` | optional | OpenAI API key for automatic subtitle recognition (Whisper) |
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase anonymous key |
 | `CSRF_SALT` | yes | Long random string used to sign CSRF tokens |
@@ -113,6 +116,8 @@ Create `.env.local` in the repo root:
 | `UNLIMITED_VIDEO_USERS` | optional | Comma-separated emails or user IDs allowed to bypass daily limits |
 
 > Generate a unique `CSRF_SALT` (e.g., `openssl rand -base64 32`). `UNLIMITED_VIDEO_USERS` entries are normalized to lowercase.
+>
+> **Note on automatic subtitles:** When `OPENAI_API_KEY` is configured, the app will automatically fall back to Whisper-based transcription if a YouTube video lacks subtitles. Local video uploads can also generate subtitles automatically when no subtitle file is provided. See `docs/AUTO_SUBTITLE_FEATURE.md` for detailed documentation.
 
 ### 3. Supabase Setup
 

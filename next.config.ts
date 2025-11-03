@@ -21,6 +21,15 @@ const nextConfig: NextConfig = {
       };
     }
 
+    // Mark ffmpeg packages as external for server-side
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push({
+        '@ffmpeg-installer/ffmpeg': 'commonjs @ffmpeg-installer/ffmpeg',
+        'fluent-ffmpeg': 'commonjs fluent-ffmpeg',
+      });
+    }
+
     return config;
   },
   // Turbopack configuration

@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 
 interface LocalVideoUploadProps {
   onUploadComplete: (videoId: string, transcript: any[]) => void;
@@ -92,8 +91,8 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
   };
 
   const handleUpload = async () => {
-    if (!videoFile || !subtitleFile || !title.trim()) {
-      setError('Please provide video, subtitle, and title');
+    if (!videoFile || !title.trim()) {
+      setError('Please provide video and title');
       return;
     }
 
@@ -106,46 +105,70 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
       const duration = await getVideoDuration();
       setUploadProgress(10);
 
-      // Upload video
-      const videoFormData = new FormData();
-      videoFormData.append('video', videoFile);
-      videoFormData.append('title', title.trim());
-      videoFormData.append('author', author.trim() || 'Local Upload');
-      videoFormData.append('duration', duration.toString());
+      // If subtitle file is provided, use the old flow
+      if (subtitleFile) {
+        // Upload video
+        const videoFormData = new FormData();
+        videoFormData.append('video', videoFile);
+        videoFormData.append('title', title.trim());
+        videoFormData.append('author', author.trim() || 'Local Upload');
+        videoFormData.append('duration', duration.toString());
 
-      const videoResponse = await fetch('/api/local/upload-video', {
-        method: 'POST',
-        body: videoFormData
-      });
+        const videoResponse = await fetch('/api/local/upload-video', {
+          method: 'POST',
+          body: videoFormData
+        });
 
-      if (!videoResponse.ok) {
-        const errorData = await videoResponse.json();
-        throw new Error(errorData.error || 'Failed to upload video');
+        if (!videoResponse.ok) {
+          const errorData = await videoResponse.json();
+          throw new Error(errorData.error || 'Failed to upload video');
+        }
+
+        const videoData = await videoResponse.json();
+        setUploadProgress(60);
+
+        // Upload subtitle
+        const subtitleFormData = new FormData();
+        subtitleFormData.append('subtitle', subtitleFile);
+        subtitleFormData.append('videoId', videoData.videoId);
+
+        const subtitleResponse = await fetch('/api/local/upload-subtitle', {
+          method: 'POST',
+          body: subtitleFormData
+        });
+
+        if (!subtitleResponse.ok) {
+          const errorData = await subtitleResponse.json();
+          throw new Error(errorData.error || 'Failed to process subtitle');
+        }
+
+        const subtitleData = await subtitleResponse.json();
+        setUploadProgress(100);
+
+        // Call completion handler
+        onUploadComplete(videoData.videoId, subtitleData.transcript);
+      } else {
+        // No subtitle file - use automatic recognition
+        const formData = new FormData();
+        formData.append('video', videoFile);
+        formData.append('language', 'en');
+
+        const response = await fetch('/api/upload-video', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.details || errorData.error || 'Failed to process video');
+        }
+
+        const data = await response.json();
+        setUploadProgress(100);
+
+        // Call completion handler
+        onUploadComplete(data.videoId, data.transcript);
       }
-
-      const videoData = await videoResponse.json();
-      setUploadProgress(60);
-
-      // Upload subtitle
-      const subtitleFormData = new FormData();
-      subtitleFormData.append('subtitle', subtitleFile);
-      subtitleFormData.append('videoId', videoData.videoId);
-
-      const subtitleResponse = await fetch('/api/local/upload-subtitle', {
-        method: 'POST',
-        body: subtitleFormData
-      });
-
-      if (!subtitleResponse.ok) {
-        const errorData = await subtitleResponse.json();
-        throw new Error(errorData.error || 'Failed to process subtitle');
-      }
-
-      const subtitleData = await subtitleResponse.json();
-      setUploadProgress(100);
-
-      // Call completion handler
-      onUploadComplete(videoData.videoId, subtitleData.transcript);
 
       // Reset form
       setVideoFile(null);
@@ -206,7 +229,7 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
 
         {/* Subtitle upload */}
         <div className="space-y-2">
-          <Label htmlFor="subtitle-upload">Subtitle File *</Label>
+          <Label htmlFor="subtitle-upload">Subtitle File (Optional)</Label>
           <div className="flex gap-2">
             <Button
               type="button"
@@ -238,7 +261,7 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
             className="hidden"
           />
           <p className="text-xs text-muted-foreground">
-            Supported: SRT, VTT
+            Supported: SRT, VTT. If not provided, subtitles will be auto-generated using AI.
           </p>
         </div>
 
@@ -269,7 +292,7 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
         {/* Upload button */}
         <Button
           onClick={handleUpload}
-          disabled={!videoFile || !subtitleFile || !title.trim() || isUploading}
+          disabled={!videoFile || !title.trim() || isUploading}
           className="w-full"
         >
           {isUploading ? (
