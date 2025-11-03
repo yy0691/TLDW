@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractVideoId } from '@/lib/utils';
 import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
-import { getWhisperClient } from '@/lib/whisper-client';
-import { extractAudioFromYouTube, cleanupAudioFile } from '@/lib/audio-extractor';
+import { getSubtitlesWithYtDlp, isYtDlpAvailable } from '@/lib/ytdlp-client';
 
 async function handler(request: NextRequest) {
   try {
@@ -34,7 +33,7 @@ async function handler(request: NextRequest) {
 
     let transcriptSegments: any[] | null = null;
     try {
-      const response = await fetch(`https://api.supadata.ai/v1/youtube/transcript?url=https://www.youtube.com/watch?v=${videoId}&lang=en`, {
+      const response = await fetch(`https://api.supadata.ai/v1/youtube/transcript?url=https://www.youtube.com/watch?v=${videoId}`, {
         method: 'GET',
         headers: {
           'x-api-key': apiKey,
@@ -75,26 +74,11 @@ async function handler(request: NextRequest) {
           ? parsedBody.details.trim()
           : 'No transcript is available for this video.';
 
-      const unsupportedLanguage =
-        combinedErrorMessage.includes('user aborted request') ||
-        combinedErrorMessage.includes('language') ||
-        combinedErrorMessage.includes('unsupported transcript language');
-
       if (!response.ok) {
         if (response.status === 404) {
           return NextResponse.json(
             { error: 'No transcript/captions available for this video. The video may not have subtitles enabled.' },
             { status: 404 }
-          );
-        }
-
-        if (unsupportedLanguage) {
-          return NextResponse.json(
-            {
-              error: 'Unsupported transcript language',
-              details: 'We currently support only YouTube videos with English transcripts. Please choose a video that has English captions enabled.'
-            },
-            { status: 400 }
           );
         }
 
@@ -104,18 +88,13 @@ async function handler(request: NextRequest) {
       }
 
       if (response.status === 206 || hasSupadataError) {
-        const status = unsupportedLanguage ? 400 : 404;
-        const errorPayload = unsupportedLanguage
-          ? {
-              error: 'Unsupported transcript language',
-              details: 'We currently support only YouTube videos with English transcripts. Please choose a video that has English captions enabled.'
-            }
-          : {
-              error: supadataStatusMessage,
-              details: supadataDetails
-            };
-
-        return NextResponse.json(errorPayload, { status });
+        return NextResponse.json(
+          {
+            error: supadataStatusMessage,
+            details: supadataDetails
+          },
+          { status: 404 }
+        );
       }
 
       const candidateContent = Array.isArray(parsedBody?.content)
@@ -137,86 +116,28 @@ async function handler(request: NextRequest) {
       }
 
       transcriptSegments = candidateContent;
-
-      const reportedLanguages = transcriptSegments
-        .map(item => {
-          if (item && typeof item === 'object') {
-            if (typeof (item as any).lang === 'string') return (item as any).lang;
-            if (typeof (item as any).language === 'string') return (item as any).language;
-          }
-          return null;
-        })
-        .filter((lang): lang is string => typeof lang === 'string' && lang.trim().length > 0)
-        .map(lang => lang.trim().toLowerCase());
-
-      const hasReportedEnglish = reportedLanguages.some(lang => lang === 'en' || lang.startsWith('en-'));
-      const hasReportedLanguages = reportedLanguages.length > 0;
-
-      const sampleText = transcriptSegments
-        .slice(0, 120)
-        .map(item => {
-          if (!item || typeof item !== 'object') return '';
-          if (typeof (item as any).text === 'string') return (item as any).text;
-          if (typeof (item as any).content === 'string') return (item as any).content;
-          return '';
-        })
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-      const nonSpaceLength = sampleText.replace(/\s/g, '').length;
-      const englishLetterCount = (sampleText.match(/[A-Za-z]/g) ?? []).length;
-      const cjkCharacterPresent = /[\u3400-\u9FFF]/.test(sampleText);
-      const englishRatio = nonSpaceLength > 0 ? englishLetterCount / nonSpaceLength : 0;
-
-      const appearsNonEnglish =
-        (hasReportedLanguages && !hasReportedEnglish) ||
-        (cjkCharacterPresent && englishRatio < 0.2) ||
-        (!hasReportedLanguages && englishRatio < 0.1 && nonSpaceLength > 0);
-
-      if (appearsNonEnglish) {
-        return NextResponse.json(
-          {
-            error: 'Unsupported transcript language',
-            details: 'We currently support only YouTube videos with English transcripts. Please choose a video that has English captions enabled.'
-          },
-          { status: 400 }
-        );
-      }
     } catch (fetchError) {
       const errorMessage = fetchError instanceof Error ? fetchError.message : '';
       
-      // If transcript fetch failed and auto-fallback is enabled, try Whisper
-      if (autoFallback && process.env.OPENAI_API_KEY) {
-        console.log(`[Transcript] Supadata failed, attempting Whisper fallback for video: ${videoId}`);
+      // If transcript fetch failed and auto-fallback is enabled, try yt-dlp
+      if (autoFallback && await isYtDlpAvailable()) {
+        console.log(`[Transcript] Supadata failed, attempting yt-dlp fallback for video: ${videoId}`);
         
-        let audioPath: string | null = null;
         try {
-          // Extract audio and transcribe with Whisper
-          audioPath = await extractAudioFromYouTube(videoId, {
-            maxDuration: 7200,
-            format: 'mp3',
-            sampleRate: 16000,
-          });
+          // Use yt-dlp to extract subtitles (supports YouTube, Bilibili, etc.)
+          const ytdlpTranscript = await getSubtitlesWithYtDlp(url);
           
-          const whisperClient = getWhisperClient();
-          const whisperTranscript = await whisperClient.transcribe(audioPath, 'en');
-          
-          console.log(`[Transcript] Whisper fallback successful: ${whisperTranscript.length} segments`);
+          console.log(`[Transcript] yt-dlp fallback successful: ${ytdlpTranscript.length} segments`);
           
           return NextResponse.json({
             videoId,
-            transcript: whisperTranscript,
-            source: 'whisper',
+            transcript: ytdlpTranscript,
+            source: 'ytdlp',
             fallback: true,
           });
-        } catch (whisperError) {
-          console.error('[Transcript] Whisper fallback also failed:', whisperError);
+        } catch (ytdlpError) {
+          console.error('[Transcript] yt-dlp fallback also failed:', ytdlpError);
           // Continue to original error handling
-        } finally {
-          if (audioPath) {
-            cleanupAudioFile(audioPath);
-          }
         }
       }
       
@@ -224,7 +145,7 @@ async function handler(request: NextRequest) {
         return NextResponse.json(
           { 
             error: 'No transcript/captions available for this video. The video may not have subtitles enabled.',
-            canAutoGenerate: !!process.env.OPENAI_API_KEY,
+            canAutoGenerate: await isYtDlpAvailable(),
           },
           { status: 404 }
         );
@@ -233,44 +154,32 @@ async function handler(request: NextRequest) {
     }
     
     if (!transcriptSegments || transcriptSegments.length === 0) {
-      // If no transcript found and auto-fallback is enabled, try Whisper
-      if (autoFallback && process.env.OPENAI_API_KEY) {
-        console.log(`[Transcript] No segments found, attempting Whisper fallback for video: ${videoId}`);
+      // If no transcript found and auto-fallback is enabled, try yt-dlp
+      if (autoFallback && await isYtDlpAvailable()) {
+        console.log(`[Transcript] No segments found, attempting yt-dlp fallback for video: ${videoId}`);
         
-        let audioPath: string | null = null;
         try {
-          // Extract audio and transcribe with Whisper
-          audioPath = await extractAudioFromYouTube(videoId, {
-            maxDuration: 7200,
-            format: 'mp3',
-            sampleRate: 16000,
-          });
+          // Use yt-dlp to extract subtitles
+          const ytdlpTranscript = await getSubtitlesWithYtDlp(url);
           
-          const whisperClient = getWhisperClient();
-          const whisperTranscript = await whisperClient.transcribe(audioPath, 'en');
-          
-          console.log(`[Transcript] Whisper fallback successful: ${whisperTranscript.length} segments`);
+          console.log(`[Transcript] yt-dlp fallback successful: ${ytdlpTranscript.length} segments`);
           
           return NextResponse.json({
             videoId,
-            transcript: whisperTranscript,
-            source: 'whisper',
+            transcript: ytdlpTranscript,
+            source: 'ytdlp',
             fallback: true,
           });
-        } catch (whisperError) {
-          console.error('[Transcript] Whisper fallback also failed:', whisperError);
+        } catch (ytdlpError) {
+          console.error('[Transcript] yt-dlp fallback also failed:', ytdlpError);
           // Continue to original error handling
-        } finally {
-          if (audioPath) {
-            cleanupAudioFile(audioPath);
-          }
         }
       }
       
       return NextResponse.json(
         { 
           error: 'No transcript available for this video',
-          canAutoGenerate: !!process.env.OPENAI_API_KEY,
+          canAutoGenerate: await isYtDlpAvailable(),
         },
         { status: 404 }
       );

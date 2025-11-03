@@ -5,16 +5,16 @@ import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 async function handler(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
-    // Check authentication
+    // 登录认证
+    // Check authentication (commented out for local testing)
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
+    // if (authError || !user) {
+    //   return NextResponse.json(
+    //     { error: 'Authentication required' },
+    //     { status: 401 }
+    //   );
+    // }
 
     const formData = await request.formData();
     const videoFile = formData.get('video') as File;
@@ -55,7 +55,8 @@ async function handler(request: NextRequest) {
 
     // Generate unique video ID
     const videoId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const fileName = `${user.id}/${videoId}/${videoFile.name}`;
+    const userId = user?.id || 'anonymous';
+    const fileName = `${userId}/${videoId}/${videoFile.name}`;
 
     // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase

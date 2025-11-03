@@ -89,7 +89,8 @@ The project is a Next.js 15 + React 19 application that wraps Google Gemini 2.5 
 
 - Node.js 18+ (Next.js 15 requires 18.18 or newer)
 - `npm` (repo uses package-lock.json), though `pnpm` or `yarn` also work
-- Supabase project (Auth + Postgres) and API keys for Supadata & Google Gemini
+- Supabase project (Auth + Postgres) and API keys for Google Gemini
+- **Optional but recommended**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) for free subtitle extraction (see `YTDLP_SETUP.md`)
 
 ### 1. Clone & Install
 
@@ -106,8 +107,7 @@ Create `.env.local` in the repo root:
 | Variable | Required | Description |
 | --- | --- | --- |
 | `GEMINI_API_KEY` | yes | Google Gemini API key (2.5 models) |
-| `SUPADATA_API_KEY` | yes | Supadata transcript API key |
-| `OPENAI_API_KEY` | optional | OpenAI API key for automatic subtitle recognition (Whisper) |
+| `SUPADATA_API_KEY` | optional | Supadata transcript API key (if not set, uses yt-dlp fallback) |
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase anonymous key |
 | `CSRF_SALT` | yes | Long random string used to sign CSRF tokens |
@@ -117,7 +117,7 @@ Create `.env.local` in the repo root:
 
 > Generate a unique `CSRF_SALT` (e.g., `openssl rand -base64 32`). `UNLIMITED_VIDEO_USERS` entries are normalized to lowercase.
 >
-> **Note on automatic subtitles:** When `OPENAI_API_KEY` is configured, the app will automatically fall back to Whisper-based transcription if a YouTube video lacks subtitles. Local video uploads can also generate subtitles automatically when no subtitle file is provided. See `docs/AUTO_SUBTITLE_FEATURE.md` for detailed documentation.
+> **Note on automatic subtitles:** When yt-dlp is installed, the app will automatically fall back to free subtitle extraction if Supadata fails or is not configured. See `YTDLP_SETUP.md` for installation instructions.
 
 ### 3. Supabase Setup
 
