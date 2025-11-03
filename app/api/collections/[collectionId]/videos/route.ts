@@ -3,11 +3,13 @@ import { createClient } from '@/lib/supabase/server';
 import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 
 async function postHandler(
-  request: NextRequest,
-  { params }: { params: Promise<{ collectionId: string }> }
+  request: NextRequest
 ) {
   try {
-    const { collectionId } = await params;
+    // Extract collectionId from URL
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const collectionId = pathParts[pathParts.indexOf('collections') + 1];
     const supabase = await createClient();
     
     // Check authentication
@@ -109,11 +111,13 @@ async function postHandler(
 }
 
 async function deleteHandler(
-  request: NextRequest,
-  { params }: { params: Promise<{ collectionId: string }> }
+  request: NextRequest
 ) {
   try {
-    const { collectionId } = await params;
+    // Extract collectionId from URL
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const collectionId = pathParts[pathParts.indexOf('collections') + 1];
     const supabase = await createClient();
     
     // Check authentication

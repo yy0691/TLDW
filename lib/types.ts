@@ -1,10 +1,15 @@
 // Video source types
 export type VideoSource = 'youtube' | 'bilibili' | 'local';
 
+// Supported transcript languages
+export type TranscriptLanguage = 'en' | 'zh-CN' | 'zh-TW' | 'original';
+
 export interface TranscriptSegment {
   text: string;
   start: number;
   duration: number;
+  originalText?: string; // Store original text when translated
+  language?: TranscriptLanguage; // Language of the current text
 }
 
 export interface Topic {

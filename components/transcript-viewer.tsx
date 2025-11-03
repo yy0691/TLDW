@@ -1,15 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { TranscriptSegment, Topic, Citation } from "@/lib/types";
+import { TranscriptSegment, Topic, Citation, TranscriptLanguage } from "@/lib/types";
 import { getTopicHSLColor, formatDuration } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Eye, EyeOff, ChevronDown } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, Languages, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { SelectionActions, triggerExplainSelection, SelectionActionPayload } from "@/components/selection-actions";
 import { NoteMetadata } from "@/lib/types";
+import { translateTranscript, detectTranscriptLanguage, restoreOriginalTranscript } from "@/lib/transcript-translator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface TranscriptViewerProps {
   transcript: TranscriptSegment[];
@@ -20,6 +27,7 @@ interface TranscriptViewerProps {
   citationHighlight?: Citation | null;
   onTakeNoteFromSelection?: (payload: SelectionActionPayload) => void;
   videoId?: string;
+  onTranscriptTranslated?: (translatedTranscript: TranscriptSegment[]) => void;
 }
 
 export function TranscriptViewer({
@@ -30,7 +38,8 @@ export function TranscriptViewer({
   topics = [],
   citationHighlight,
   onTakeNoteFromSelection,
-  videoId
+  videoId,
+  onTranscriptTranslated
 }: TranscriptViewerProps) {
   const highlightedRefs = useRef<(HTMLDivElement | null)[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -40,6 +49,9 @@ export function TranscriptViewer({
   const [showScrollToCurrentButton, setShowScrollToCurrentButton] = useState(false);
   const lastUserScrollTime = useRef<number>(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState<TranscriptLanguage>('original');
+  const abortControllerRef = useRef<AbortController | null>(null);
   const selectedTopicIndex = selectedTopic
     ? topics.findIndex((topic) => topic.id === selectedTopic.id)
     : -1;
@@ -203,6 +215,64 @@ export function TranscriptViewer({
       };
     }
   }, [handleUserScroll]);
+
+  // Detect initial language
+  useEffect(() => {
+    if (transcript && transcript.length > 0 && currentLanguage === 'original') {
+      const detectedLang = transcript[0]?.language || detectTranscriptLanguage(transcript);
+      setCurrentLanguage(detectedLang);
+    }
+  }, [transcript]);
+
+  // Cleanup abort controller on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  const handleTranslate = useCallback(async (targetLang: TranscriptLanguage) => {
+    if (isTranslating) return;
+    
+    // Cancel any ongoing translation
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    abortControllerRef.current = new AbortController();
+    setIsTranslating(true);
+
+    try {
+      const sourceLanguage = detectTranscriptLanguage(transcript);
+      const result = await translateTranscript({
+        transcript,
+        targetLanguage: targetLang,
+        sourceLanguage,
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (result.transcript) {
+        onTranscriptTranslated?.(result.transcript);
+        setCurrentLanguage(targetLang);
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('[TranscriptViewer] Translation failed:', error);
+        alert('Translation failed. Please try again.');
+      }
+    } finally {
+      setIsTranslating(false);
+      abortControllerRef.current = null;
+    }
+  }, [transcript, isTranslating, onTranscriptTranslated]);
+
+  const handleRestoreOriginal = useCallback(() => {
+    const restored = restoreOriginalTranscript(transcript);
+    onTranscriptTranslated?.(restored);
+    setCurrentLanguage('original');
+  }, [transcript, onTranscriptTranslated]);
 
   const getSegmentTopic = (segment: TranscriptSegment): { topic: Topic; index: number } | null => {
     for (let i = 0; i < topics.length; i++) {
@@ -410,30 +480,72 @@ export function TranscriptViewer({
               )}
             </div>
 
-            <Button
-              variant={autoScroll ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setAutoScroll(!autoScroll);
-                if (!autoScroll) {
-                  setShowScrollToCurrentButton(false);
-                  jumpToCurrent();
-                }
-              }}
-              className="text-[11px] h-6 shadow-none"
-            >
-              {autoScroll ? (
-                <>
-                  <Eye className="w-2.5 h-2.5 mr-1" />
-                  Auto
-                </>
-              ) : (
-                <>
-                  <EyeOff className="w-2.5 h-2.5 mr-1" />
-                  Manual
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Translation menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isTranslating}
+                    className="text-[11px] h-6 shadow-none"
+                  >
+                    {isTranslating ? (
+                      <>
+                        <div className="w-2.5 h-2.5 mr-1 border-2 border-t-transparent border-current rounded-full animate-spin" />
+                        Translating...
+                      </>
+                    ) : (
+                      <>
+                        <Languages className="w-2.5 h-2.5 mr-1" />
+                        {currentLanguage === 'zh-CN' ? '简中' : currentLanguage === 'original' ? 'Original' : currentLanguage}
+                      </>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[180px]">
+                  <DropdownMenuItem
+                    onClick={() => handleTranslate('zh-CN')}
+                    disabled={isTranslating || currentLanguage === 'zh-CN'}
+                  >
+                    <Languages className="w-3.5 h-3.5 mr-2" />
+                    Translate to 简体中文
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleRestoreOriginal}
+                    disabled={isTranslating || currentLanguage === 'original'}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 mr-2" />
+                    Restore Original
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                variant={autoScroll ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setAutoScroll(!autoScroll);
+                  if (!autoScroll) {
+                    setShowScrollToCurrentButton(false);
+                    jumpToCurrent();
+                  }
+                }}
+                className="text-[11px] h-6 shadow-none"
+              >
+                {autoScroll ? (
+                  <>
+                    <Eye className="w-2.5 h-2.5 mr-1" />
+                    Auto
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="w-2.5 h-2.5 mr-1" />
+                    Manual
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
 

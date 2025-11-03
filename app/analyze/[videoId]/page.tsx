@@ -1684,6 +1684,7 @@ export default function AnalyzePage() {
                   onCancelEditing={handleCancelEditing}
                   isAuthenticated={!!user}
                   onRequestSignIn={promptSignInForNotes}
+                  onTranscriptTranslated={setTranscript}
                 />
               </div>
             </div>

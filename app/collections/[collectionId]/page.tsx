@@ -113,14 +113,14 @@ export default function CollectionPage({ params }: CollectionPageProps) {
         <div className="space-y-3">
           {collection.videos.map((video, index) => (
             <Card
-              key={video.id}
+              key={video.videoId}
               className="p-4 hover:shadow-lg transition-shadow"
             >
               <div className="flex gap-4">
                 {/* Thumbnail */}
                 <div className="relative shrink-0">
                   <img
-                    src={video.thumbnailUrl || video.thumbnail}
+                    src={video.thumbnail}
                     alt={video.title}
                     className="w-40 h-24 object-cover rounded"
                   />
@@ -129,7 +129,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
                       size="icon"
                       variant="secondary"
                       className="rounded-full opacity-80 hover:opacity-100"
-                      onClick={() => router.push(`/analyze/${video.youtubeId || video.videoId}`)}
+                      onClick={() => router.push(`/analyze/${video.videoId}`)}
                     >
                       <Play className="h-5 w-5" />
                     </Button>
@@ -160,7 +160,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleRemoveVideo(video.id)}
+                      onClick={() => handleRemoveVideo(video.videoId)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
