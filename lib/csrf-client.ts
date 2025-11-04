@@ -135,6 +135,17 @@ export const csrfFetch = {
       body: typeof body === 'string' ? body : JSON.stringify(body)
     }),
 
+  patch: (url: string, body?: any, options?: RequestInit) =>
+    fetchWithCSRF(url, {
+      ...options,
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+      },
+      body: typeof body === 'string' ? body : JSON.stringify(body)
+    }),
+
   delete: (url: string, options?: RequestInit) =>
     fetchWithCSRF(url, { ...options, method: 'DELETE' })
 };

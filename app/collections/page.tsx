@@ -16,7 +16,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import type { VideoCollection } from "@/lib/types";
+import { fetchCollections, createCollection, deleteCollection } from "@/lib/collections-client";
 
 export default function CollectionsPage() {
   const router = useRouter();
@@ -28,22 +30,17 @@ export default function CollectionsPage() {
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
-    fetchCollections();
+    loadCollections();
   }, []);
 
-  const fetchCollections = async () => {
+  const loadCollections = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/collections');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch collections');
-      }
-
-      const data = await response.json();
-      setCollections(data.collections || []);
+      const data = await fetchCollections();
+      setCollections(data);
     } catch (error) {
       console.error('Error fetching collections:', error);
+      toast.error("Failed to load collections");
     } finally {
       setIsLoading(false);
     }
@@ -54,26 +51,19 @@ export default function CollectionsPage() {
 
     try {
       setIsCreating(true);
-      const response = await fetch('/api/collections', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newCollectionTitle,
-          description: newCollectionDescription
-        })
+      const newCollection = await createCollection({
+        title: newCollectionTitle,
+        description: newCollectionDescription
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to create collection');
-      }
-
-      const data = await response.json();
-      setCollections([data.collection, ...collections]);
+      setCollections([newCollection, ...collections]);
       setIsCreateDialogOpen(false);
       setNewCollectionTitle("");
       setNewCollectionDescription("");
+      toast.success("Collection created");
     } catch (error) {
       console.error('Error creating collection:', error);
+      toast.error("Failed to create collection");
     } finally {
       setIsCreating(false);
     }
@@ -83,19 +73,12 @@ export default function CollectionsPage() {
     if (!confirm('Are you sure you want to delete this collection?')) return;
 
     try {
-      const response = await fetch('/api/collections', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collectionId })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete collection');
-      }
-
+      await deleteCollection(collectionId);
       setCollections(collections.filter(c => c.id !== collectionId));
+      toast.success("Collection deleted");
     } catch (error) {
       console.error('Error deleting collection:', error);
+      toast.error("Failed to delete collection");
     }
   };
 
