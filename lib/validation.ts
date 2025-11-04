@@ -10,6 +10,15 @@ export const youtubeIdSchema = z.string()
   .regex(YOUTUBE_ID_REGEX, 'Invalid YouTube video ID format')
   .max(11);
 
+// Local Video ID validation (e.g., "local_1699999999_abcd123")
+const LOCAL_ID_REGEX = /^local_[a-zA-Z0-9_-]{5,}$/;
+export const localIdSchema = z.string()
+  .regex(LOCAL_ID_REGEX, 'Invalid local video ID format')
+  .max(200);
+
+// Generic Video ID supports either YouTube IDs or local IDs
+export const videoIdSchema = z.union([youtubeIdSchema, localIdSchema]);
+
 // URL validation with YouTube specific checks
 export const youtubeUrlSchema = z.string()
   .url('Invalid URL format')
@@ -104,7 +113,7 @@ export const chatMessageSchema = z.object({
 
 // API Request schemas
 export const videoAnalysisRequestSchema = z.object({
-  videoId: youtubeIdSchema,
+  videoId: videoIdSchema,
   videoInfo: videoInfoSchema,
   transcript: transcriptSchema,
   model: modelSchema.default('gemini-2.5-flash'),
@@ -140,7 +149,7 @@ export const chatRequestSchema = z.object({
 });
 
 export const toggleFavoriteRequestSchema = z.object({
-  videoId: youtubeIdSchema,
+  videoId: videoIdSchema,
   isFavorite: z.boolean()
 });
 
@@ -178,11 +187,11 @@ export const noteDeleteSchema = z.object({
 });
 
 export const checkVideoCacheRequestSchema = z.object({
-  videoId: youtubeIdSchema
+  videoId: videoIdSchema
 });
 
 export const updateVideoAnalysisRequestSchema = z.object({
-  videoId: youtubeIdSchema,
+  videoId: videoIdSchema,
   summary: z.any().optional(),
   suggestedQuestions: z.any().optional()
 });

@@ -5,20 +5,20 @@ import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 
 async function handler(req: NextRequest) {
   try {
-    const { url } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { url, videoId: rawVideoId } = (body ?? {}) as { url?: string; videoId?: string };
 
-    if (!url) {
-      return NextResponse.json(
-        { error: 'URL is required' },
-        { status: 400 }
-      );
+    // Determine videoId from either url (YouTube) or explicit local/youtube id
+    let videoId: string | null = null;
+    if (typeof url === 'string' && url.trim().length > 0) {
+      videoId = extractVideoId(url);
     }
-
-    // Extract video ID from URL
-    const videoId = extractVideoId(url);
+    if (!videoId && typeof rawVideoId === 'string' && rawVideoId.trim().length > 0) {
+      videoId = rawVideoId.trim();
+    }
     if (!videoId) {
       return NextResponse.json(
-        { error: 'Invalid YouTube URL' },
+        { error: 'videoId or url is required' },
         { status: 400 }
       );
     }
@@ -28,7 +28,7 @@ async function handler(req: NextRequest) {
     // Get current user if logged in
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Check for cached video
+    // Check for cached video (works for both YouTube and local IDs)
     const { data: cachedVideo } = await supabase
       .from('video_analyses')
       .select('*')

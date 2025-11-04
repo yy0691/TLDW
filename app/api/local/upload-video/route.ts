@@ -4,6 +4,19 @@ import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
 
 async function handler(request: NextRequest) {
   try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json(
+        {
+          error: 'Supabase configuration missing',
+          details: 'NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set in your environment before uploading local videos.'
+        },
+        { status: 503 }
+      );
+    }
+
     const supabase = await createClient();
     // 登录认证
     // Check authentication (commented out for local testing)
@@ -59,9 +72,11 @@ async function handler(request: NextRequest) {
     const fileName = `${userId}/${videoId}/${videoFile.name}`;
 
     // Upload to Supabase Storage
+    const videosBucket = process.env.NEXT_PUBLIC_SUPABASE_VIDEOS_BUCKET ?? 'videos';
+
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('videos')
+      .from(videosBucket)
       .upload(fileName, videoFile, {
         contentType: videoFile.type,
         upsert: false
@@ -69,8 +84,13 @@ async function handler(request: NextRequest) {
 
     if (uploadError) {
       console.error('Upload error:', uploadError);
+      const errorMessage = uploadError.message || 'Failed to upload video';
       return NextResponse.json(
-        { error: 'Failed to upload video' },
+        {
+          error: 'Failed to upload video',
+          details: errorMessage,
+          hint: `Ensure the Supabase storage bucket "${videosBucket}" exists and your service role has access.`
+        },
         { status: 500 }
       );
     }
@@ -78,7 +98,7 @@ async function handler(request: NextRequest) {
     // Get public URL
     const { data: { publicUrl } } = supabase
       .storage
-      .from('videos')
+      .from(videosBucket)
       .getPublicUrl(fileName);
 
     // Get video duration (we'll need this from the client side)

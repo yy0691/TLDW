@@ -263,7 +263,7 @@ export default function AnalyzePage() {
         const checkResponse = await fetch('/api/check-video-cache', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: checkUrl })
+          body: JSON.stringify({ url: checkUrl, videoId: videoToLink })
         });
 
         if (!checkResponse.ok || !(await checkResponse.json()).cached) {
@@ -419,9 +419,12 @@ export default function AnalyzePage() {
   ) => {
     const currentRemaining = rateLimitInfo.remaining;
     try {
-      const extractedVideoId = extractVideoId(url);
+      // Check if this is a local video by checking the URL or videoId format
+      const isLocalVideo = url.includes('source=local') || routeVideoId?.startsWith('local_');
+      
+      const extractedVideoId = isLocalVideo ? routeVideoId : extractVideoId(url);
       if (!extractedVideoId) {
-        throw new Error("Invalid YouTube URL");
+        throw new Error(isLocalVideo ? "Invalid local video ID" : "Invalid YouTube URL");
       }
 
       // Cleanup any pending requests from previous analysis
@@ -473,7 +476,7 @@ export default function AnalyzePage() {
       const cacheResponse = await fetch("/api/check-video-cache", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url })
+        body: JSON.stringify({ url, videoId: extractedVideoId })
       });
 
       if (cacheResponse.ok) {
@@ -655,57 +658,99 @@ export default function AnalyzePage() {
       setPageState('ANALYZING_NEW');
       setLoadingStage('fetching');
 
-      // Not cached, proceed with normal flow
-      // Create AbortControllers for both requests
-      const transcriptController = abortManager.current.createController('transcript', 300000);
-      const videoInfoController = abortManager.current.createController('videoInfo', 100000);
-
-      // Fetch transcript and video info in parallel
-      const transcriptPromise = fetch("/api/transcript", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-        signal: transcriptController.signal,
-      }).catch(err => {
-        if (err.name === 'AbortError') {
-          throw new Error("Transcript request timed out. Please try again.");
+      // Check if this is a local video with transcript in sessionStorage
+      let transcriptData: any = null;
+      let videoInfoData: any = null;
+      
+      if (isLocalVideo) {
+        // Try to get transcript from sessionStorage for local videos
+        try {
+          const storedTranscript = sessionStorage.getItem(`transcript_${extractedVideoId}`);
+          if (storedTranscript) {
+            transcriptData = { transcript: JSON.parse(storedTranscript) };
+            console.log('[Local Video] Loaded transcript from sessionStorage');
+            
+            // Clean up sessionStorage after reading
+            sessionStorage.removeItem(`transcript_${extractedVideoId}`);
+          } else {
+            throw new Error("No transcript found for this local video. Please upload the video with subtitles again.");
+          }
+        } catch (error) {
+          console.error('[Local Video] Failed to load transcript:', error);
+          throw error;
         }
-        throw new Error("Network error: Unable to fetch transcript. Please ensure the server is running.");
-      });
+        
+        // For local videos, we don't have video info from external sources
+        // We'll create basic video info from the videoId
+        videoInfoData = {
+          title: extractedVideoId.replace('local_', 'Local Video '),
+          author: 'Local Upload',
+          duration: 0, // Will be updated from transcript if available
+        };
+      } else {
+        // Not cached, proceed with normal flow for YouTube/Bilibili videos
+        // Create AbortControllers for both requests
+        const transcriptController = abortManager.current.createController('transcript', 300000);
+        const videoInfoController = abortManager.current.createController('videoInfo', 100000);
 
-      const videoInfoPromise = fetch("/api/video-info", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
-        signal: videoInfoController.signal,
-      }).catch(err => {
-        if (err.name === 'AbortError') {
-          console.error("Video info request timed out");
+        // Fetch transcript and video info in parallel
+        const transcriptPromise = fetch("/api/transcript", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+          signal: transcriptController.signal,
+        }).catch(err => {
+          if (err.name === 'AbortError') {
+            throw new Error("Transcript request timed out. Please try again.");
+          }
+          throw new Error("Network error: Unable to fetch transcript. Please ensure the server is running.");
+        });
+
+        const videoInfoPromise = fetch("/api/video-info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+          signal: videoInfoController.signal,
+        }).catch(err => {
+          if (err.name === 'AbortError') {
+            console.error("Video info request timed out");
+            return null;
+          }
+          console.error("Failed to fetch video info:", err);
           return null;
+        });
+
+        // Wait for both requests to complete
+        const [transcriptRes, videoInfoRes] = await Promise.all([
+          transcriptPromise,
+          videoInfoPromise
+        ]);
+
+        // AbortManager handles timeout cleanup automatically
+
+        // Process transcript response (required)
+        if (!transcriptRes || !transcriptRes.ok) {
+          const errorData = transcriptRes ? await transcriptRes.json().catch(() => ({ error: "Unknown error" })) : { error: "Failed to fetch transcript" };
+          const message = buildApiErrorMessage(errorData, "Failed to fetch transcript");
+          throw new Error(message);
         }
-        console.error("Failed to fetch video info:", err);
-        return null;
-      });
 
-      // Wait for both requests to complete
-      const [transcriptRes, videoInfoRes] = await Promise.all([
-        transcriptPromise,
-        videoInfoPromise
-      ]);
+        transcriptData = await transcriptRes.json();
 
-      // AbortManager handles timeout cleanup automatically
-
-      // Process transcript response (required)
-      if (!transcriptRes || !transcriptRes.ok) {
-        const errorData = transcriptRes ? await transcriptRes.json().catch(() => ({ error: "Unknown error" })) : { error: "Failed to fetch transcript" };
-        const message = buildApiErrorMessage(errorData, "Failed to fetch transcript");
-        throw new Error(message);
+        // Process video info response (optional)
+        if (videoInfoRes && videoInfoRes.ok) {
+          try {
+            videoInfoData = await videoInfoRes.json();
+          } catch (error) {
+            console.error("Failed to parse video info:", error);
+          }
+        }
       }
 
+      // Now process the transcript data (works for both local and remote videos)
       let fetchedTranscript;
       try {
-        const data = await transcriptRes.json();
-        fetchedTranscript = data.transcript;
+        fetchedTranscript = transcriptData.transcript;
       } catch (jsonError) {
         if (jsonError instanceof Error && jsonError.name === 'AbortError') {
           throw new Error("Transcript processing timed out. The video may be too long. Please try again.");
@@ -716,28 +761,21 @@ export default function AnalyzePage() {
       const normalizedTranscriptData = normalizeTranscript(fetchedTranscript);
       setTranscript(normalizedTranscriptData);
 
-      // Process video info response (optional)
+      // Process video info (works for both local and remote videos)
       let fetchedVideoInfo: VideoInfo | null = null;
-      if (videoInfoRes && videoInfoRes.ok) {
-        try {
-          const videoInfoData = await videoInfoRes.json();
-          if (videoInfoData && !videoInfoData.error) {
-            setVideoInfo(videoInfoData);
-            const rawDuration = videoInfoData?.duration;
-            const numericDuration =
-              typeof rawDuration === "number"
-                ? rawDuration
-                : typeof rawDuration === "string"
-                  ? Number(rawDuration)
-                  : null;
-            if (numericDuration && !Number.isNaN(numericDuration) && numericDuration > 0) {
-              setVideoDuration(numericDuration);
-            }
-            fetchedVideoInfo = videoInfoData;
-          }
-        } catch (error) {
-          console.error("Failed to parse video info:", error);
+      if (videoInfoData && !videoInfoData.error) {
+        setVideoInfo(videoInfoData);
+        const rawDuration = videoInfoData?.duration;
+        const numericDuration =
+          typeof rawDuration === "number"
+            ? rawDuration
+            : typeof rawDuration === "string"
+              ? Number(rawDuration)
+              : null;
+        if (numericDuration && !Number.isNaN(numericDuration) && numericDuration > 0) {
+          setVideoDuration(numericDuration);
         }
+        fetchedVideoInfo = videoInfoData;
       }
 
       // Move to understanding stage
@@ -1069,7 +1107,8 @@ export default function AnalyzePage() {
     checkRateLimit,
     user,
     checkGenerationLimit,
-    redirectToAuthForLimit
+    redirectToAuthForLimit,
+    routeVideoId
   ]);
 
   useEffect(() => {
