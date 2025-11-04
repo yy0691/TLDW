@@ -74,7 +74,7 @@ export async function extractAudioFromYouTube(
         .audioBitrate(128)
         .audioFrequency(sampleRate)
         .format(format)
-        .on('error', (err) => {
+        .on('error', (err: Error) => {
           console.error('FFmpeg error:', err);
           reject(new Error(`Audio extraction failed: ${err.message}`));
         })
