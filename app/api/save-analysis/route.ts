@@ -59,6 +59,15 @@ async function handler(req: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser();
 
+    console.log('[Save Analysis] Attempting to save:', {
+      videoId,
+      title: videoInfo.title,
+      hasUser: !!user,
+      userId: user?.id,
+      transcriptLength: transcript.length,
+      topicsCount: topics.length
+    });
+
     const { data: result, error: saveError } = await supabase
       .rpc('upsert_video_analysis_with_user_link', {
         p_youtube_id: videoId,
@@ -76,15 +85,25 @@ async function handler(req: NextRequest) {
       .single();
 
     if (saveError) {
-      console.error('Error saving video analysis:', saveError);
+      console.error('[Save Analysis] Error details:', {
+        message: saveError.message,
+        code: saveError.code,
+        details: saveError.details,
+        hint: saveError.hint,
+        videoId
+      });
       return NextResponse.json(
         {
           error: 'Failed to save video analysis',
-          details: saveError.message
+          details: saveError.message,
+          code: saveError.code,
+          hint: saveError.hint
         },
         { status: 500 }
       );
     }
+
+    console.log('[Save Analysis] Success:', result);
 
     return NextResponse.json({
       success: true,
