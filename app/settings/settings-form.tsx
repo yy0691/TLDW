@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { User } from '@supabase/supabase-js'
 import { Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import ApiKeysManager from '@/components/api-keys-manager'
 
 import { toast } from 'sonner'
 
@@ -100,6 +101,9 @@ export default function SettingsForm({ user, profile, videoCount }: SettingsForm
 
   return (
     <div className="space-y-6">
+      {/* API Keys Manager */}
+      <ApiKeysManager />
+
       <Card className="overflow-hidden">
         <CardHeader className="pb-4">
           <CardTitle className="text-xl">Profile Information</CardTitle>

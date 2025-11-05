@@ -8,6 +8,7 @@ The project is a Next.js 15 + React 19 application that wraps Google Gemini 2.5 
 
 ## Feature Highlights
 
+- **User-provided API keys** – Use your own Google Gemini or OpenAI API keys for unlimited access and full control over AI costs.
 - **Automatic subtitle recognition** for videos without captions using OpenAI Whisper, with support for YouTube videos and local uploads.
 - AI highlight reels with Smart (quality) and Fast (speed) generation modes, Play All playback, and theme-based re-generation.
 - Gemini-powered quick preview, structured summary, suggested questions, and memorable quotes surfaced in parallel.
@@ -106,7 +107,9 @@ Create `.env.local` in the repo root:
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | yes | Google Gemini API key (2.5 models) |
+| `GEMINI_API_KEY` | optional* | Google Gemini API key (2.5 models) - server fallback when users don't provide their own |
+| `OPENAI_API_KEY` | optional | OpenAI API key - server fallback for users without their own keys |
+| `API_KEY_ENCRYPTION_SECRET` | yes | 64-char hex string for encrypting user API keys (generate with `npm run generate-key`) |
 | `SUPADATA_API_KEY` | optional | Supadata transcript API key (if not set, uses yt-dlp fallback) |
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Supabase anonymous key |
@@ -114,6 +117,8 @@ Create `.env.local` in the repo root:
 | `NEXT_PUBLIC_APP_URL` | optional | Canonical app URL (defaults to `http://localhost:3000`) |
 | `YOUTUBE_API_KEY` | optional | Enables additional metadata when available |
 | `UNLIMITED_VIDEO_USERS` | optional | Comma-separated emails or user IDs allowed to bypass daily limits |
+
+\* Users can provide their own API keys in Settings → AI API Keys, making server keys optional.
 
 > Generate a unique `CSRF_SALT` (e.g., `openssl rand -base64 32`). `UNLIMITED_VIDEO_USERS` entries are normalized to lowercase.
 >
