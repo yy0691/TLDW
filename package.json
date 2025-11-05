@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "generate-key": "node scripts/generate-encryption-key.cjs"
   },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.28",
+    "@ai-sdk/openai": "^2.0.62",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@google/generative-ai": "^0.24.1",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -31,6 +34,7 @@
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/jsdom": "^21.1.7",
     "@vercel/analytics": "^1.5.0",
+    "ai": "^5.0.87",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dompurify": "^3.2.7",
