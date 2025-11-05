@@ -88,7 +88,7 @@ async function handler(req: NextRequest) {
             p_transcript: cachedVideo.transcript,
             p_topics: cachedVideo.topics,
             p_summary: cachedVideo.summary || null,  // Ensure null instead of undefined
-            p_suggested_questions: cachedVideo.suggested_questions || null,
+            p_suggested_questions: null,
             p_model_used: cachedVideo.model_used,
             p_user_id: user.id
           });

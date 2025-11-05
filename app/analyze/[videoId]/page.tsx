@@ -415,7 +415,8 @@ export default function AnalyzePage() {
 
   const processVideo = useCallback(async (
     url: string,
-    selectedMode: TopicGenerationMode
+    selectedMode: TopicGenerationMode,
+    force: boolean = false
   ) => {
     const currentRemaining = rateLimitInfo.remaining;
     try {
@@ -472,17 +473,18 @@ export default function AnalyzePage() {
         setVideoId(extractedVideoId);
       }
 
-      // Check cache first before fetching transcript/metadata
-      const cacheResponse = await fetch("/api/check-video-cache", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, videoId: extractedVideoId })
-      });
+      // Check cache first before fetching transcript/metadata (unless force regenerate)
+      if (!force) {
+        const cacheResponse = await fetch("/api/check-video-cache", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, videoId: extractedVideoId })
+        });
 
-      if (cacheResponse.ok) {
-        const cacheData = await cacheResponse.json();
+        if (cacheResponse.ok) {
+          const cacheData = await cacheResponse.json();
 
-        if (cacheData.cached) {
+          if (cacheData.cached) {
           // For cached videos, we're already in LOADING_CACHED state if isCached was true
           // Otherwise, set it now
           setPageState('LOADING_CACHED');
@@ -633,7 +635,8 @@ export default function AnalyzePage() {
             });
           }
 
-          return; // Exit early - no need to fetch anything else
+            return; // Exit early - no need to fetch anything else
+          }
         }
       }
 
@@ -827,7 +830,8 @@ export default function AnalyzePage() {
           videoInfo: fetchedVideoInfo,
           transcript: normalizedTranscriptData,
           model: 'gemini-2.5-flash',
-          mode: selectedMode
+          mode: selectedMode,
+          forceRegenerate: !!force
         }),
         signal: topicsController.signal,
       }).catch(err => {
@@ -1631,11 +1635,11 @@ export default function AnalyzePage() {
                 {!isRateLimitError && (
                   <button
                     type="button"
-                    onClick={() => processVideo(normalizedUrl, mode)}
+                    onClick={() => processVideo(normalizedUrl, mode, true)}
                     className="inline-flex items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-xs font-medium text-white transition hover:bg-slate-800 disabled:pointer-events-none disabled:opacity-50"
                     disabled={isModeLoading}
                   >
-                    Try again
+                    Re-run analysis
                   </button>
                 )}
               </div>

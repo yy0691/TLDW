@@ -158,6 +158,8 @@ async function handler(request: NextRequest) {
         },
         zodSchema: summaryTakeawaysSchema
       });
+      console.log('[Generate Summary] Raw model response length:', response?.length ?? 0);
+      console.log('[Generate Summary] Raw response preview:', typeof response === 'string' ? response.slice(0, 200) : String(response));
     } catch (error) {
       console.error('Error generating summary:', error);
       throw new Error('No response from AI model');
@@ -170,18 +172,25 @@ async function handler(request: NextRequest) {
     let takeaways: StructuredTakeaway[];
     try {
       const cleanedResponse = extractJsonPayload(response);
+      console.log('[Generate Summary] Cleaned payload length:', cleanedResponse?.length ?? 0);
+      console.log('[Generate Summary] Cleaned payload preview:', typeof cleanedResponse === 'string' ? cleanedResponse.slice(0, 200) : String(cleanedResponse));
       const parsed = JSON.parse(cleanedResponse);
       const normalized = normalizeTakeawaysPayload(parsed);
 
       const validation = summaryTakeawaysSchema.safeParse(normalized);
       if (!validation.success) {
-        console.error('Normalized takeaways failed validation:', validation.error.flatten());
+        console.error('[Generate Summary] Normalized takeaways failed validation:', validation.error.flatten());
+        console.error('[Generate Summary] Normalized payload preview:', JSON.stringify(normalized).slice(0, 200));
         throw new Error('Normalized takeaways did not match expected schema');
       }
 
       takeaways = validation.data as StructuredTakeaway[];
     } catch (parseError) {
-      console.error('Failed to parse summary response:', parseError);
+      console.error('[Generate Summary] Failed to parse summary response:', parseError);
+      try {
+        const cleaned = extractJsonPayload(response);
+        console.error('[Generate Summary] Fallback cleaned preview:', typeof cleaned === 'string' ? cleaned.slice(0, 200) : String(cleaned));
+      } catch {}
       throw new Error('Invalid response format from AI model');
     }
 
@@ -193,7 +202,7 @@ async function handler(request: NextRequest) {
 
     return NextResponse.json({ summaryContent: markdown });
   } catch (error) {
-    console.error('Error generating summary:', error);
+    console.error('[Generate Summary] Error generating summary:', error);
     return NextResponse.json(
       { error: 'Failed to generate summary' },
       { status: 500 }

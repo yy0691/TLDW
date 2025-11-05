@@ -29,7 +29,15 @@ async function handler(req: NextRequest) {
     }
 
     if (suggestedQuestions !== undefined) {
-      updateData.suggested_questions = suggestedQuestions;
+      console.log('即将存入数据库的 suggested_questions 类型:', typeof suggestedQuestions);
+      console.log('即将存入数据库的 suggested_questions 内容:', suggestedQuestions);
+
+      const normalizedSuggested =
+        typeof suggestedQuestions === 'string'
+          ? suggestedQuestions
+          : JSON.stringify(suggestedQuestions);
+
+      updateData.suggested_questions = normalizedSuggested;
     }
 
     const { data: updatedVideo, error: updateError } = await supabase

@@ -51,7 +51,6 @@ async function handler(req: NextRequest) {
       transcript,
       topics,
       summary,
-      suggestedQuestions,
       model
     } = validatedData;
 
@@ -68,20 +67,31 @@ async function handler(req: NextRequest) {
       topicsCount: topics.length
     });
 
+    // Direct upsert into video_analyses to avoid RPC jsonb/text[] type issues
+    const upsertData: any = {
+      youtube_id: videoId,
+      title: videoInfo.title,
+      author: videoInfo.author || null,
+      duration: videoInfo.duration || null,
+      thumbnail_url: videoInfo.thumbnail || null,
+      transcript,
+      topics,
+      summary: summary ?? null,
+      suggested_questions: null,
+      model_used: model,
+      updated_at: new Date().toISOString(),
+    };
+
+    console.log('[Save Analysis] Upsert payload preview:', {
+      ...upsertData,
+      transcript: Array.isArray(transcript) ? `Array(${transcript.length})` : typeof transcript,
+      topics: Array.isArray(topics) ? `Array(${topics.length})` : typeof topics,
+    });
+
     const { data: result, error: saveError } = await supabase
-      .rpc('upsert_video_analysis_with_user_link', {
-        p_youtube_id: videoId,
-        p_title: videoInfo.title,
-        p_author: videoInfo.author || null,
-        p_duration: videoInfo.duration || null,
-        p_thumbnail_url: videoInfo.thumbnail || null,
-        p_transcript: transcript,
-        p_topics: topics,
-        p_summary: summary || null,
-        p_suggested_questions: suggestedQuestions || null,
-        p_model_used: model,
-        p_user_id: user?.id || null
-      })
+      .from('video_analyses')
+      .upsert(upsertData, { onConflict: 'youtube_id' })
+      .select()
       .single();
 
     if (saveError) {
