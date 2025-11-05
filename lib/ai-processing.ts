@@ -29,6 +29,7 @@ interface GenerateTopicsOptions {
   includeCandidatePool?: boolean;
   mode?: TopicGenerationMode;
   proModel?: string;
+  userId?: string; // User ID for using user's API keys
 }
 
 interface TranscriptChunk {
@@ -265,6 +266,7 @@ async function reduceCandidateSubset(
     fastModel: string;
     videoInfo?: Partial<VideoInfo>;
     segmentLabel?: string;
+    userId?: string;
   }
 ): Promise<ParsedTopic[]> {
   if (!candidates || candidates.length === 0) {
@@ -292,7 +294,8 @@ async function reduceCandidateSubset(
     const reduceResponse = await generateWithFallback(reducePrompt, {
       preferredModel: options.fastModel,
       generationConfig: { temperature: 0.4 },
-      zodSchema: selectionSchema
+      zodSchema: selectionSchema,
+      userId: options.userId,
     });
 
     if (reduceResponse) {
@@ -400,7 +403,8 @@ async function runSinglePassTopicGeneration(
   transcriptWithTimestamps: string,
   fullText: string,
   model: string,
-  theme?: string
+  theme?: string,
+  userId?: string
 ): Promise<ParsedTopic[]> {
   const themeGuidance = theme
     ? `<themeAlignment>
@@ -454,7 +458,8 @@ ${transcriptWithTimestamps}
       generationConfig: {
         temperature: 0.7,
       },
-      zodSchema: topicGenerationSchema
+      zodSchema: topicGenerationSchema,
+      userId,
     });
 
     if (!response) {
@@ -674,7 +679,8 @@ export async function generateTopicsFromTranscript(
       transcriptWithTimestamps,
       fullText,
       smartModeModel,
-      theme
+      theme,
+      options.userId
     );
 
     topicsArray = smartTopics.filter(topic => {
@@ -695,7 +701,8 @@ export async function generateTopicsFromTranscript(
       transcriptWithTimestamps,
       fullText,
       fastModel,
-      theme
+      theme,
+      options.userId
     );
     const filteredFullTranscriptTopics = fullTranscriptTopics.filter(topic => {
       if (!topic.quote?.timestamp || !topic.quote.text) return false;
@@ -723,7 +730,8 @@ export async function generateTopicsFromTranscript(
             const response = await generateWithFallback(chunkPrompt, {
               preferredModel: fastModel,
               generationConfig: { temperature: 0.6 },
-              zodSchema: topicGenerationSchema
+              zodSchema: topicGenerationSchema,
+              userId: options.userId,
             });
 
             if (!response) {
@@ -848,7 +856,8 @@ export async function generateTopicsFromTranscript(
         maxTopics: segment.maxTopics,
         fastModel,
         videoInfo,
-        segmentLabel: segment.label
+        segmentLabel: segment.label,
+        userId: options.userId,
       })
     );
 
@@ -1216,7 +1225,8 @@ function promoteDistinctThemes(themes: string[], primaryCount = 3): string[] {
 export async function generateThemesFromTranscript(
   transcript: TranscriptSegment[],
   videoInfo?: Partial<VideoInfo>,
-  model: string = 'gemini-2.5-flash-lite'
+  model: string = 'gemini-2.5-flash-lite',
+  userId?: string
 ): Promise<string[]> {
   if (!transcript || transcript.length === 0) {
     return [];
@@ -1261,7 +1271,8 @@ ${videoInfoBlock ? `${videoInfoBlock}\n\n` : ''}${transcriptWithTimestamps}`;
   try {
     const response = await generateWithFallback(prompt, {
       preferredModel: model,
-      generationConfig: { temperature: 0.3 }
+      generationConfig: { temperature: 0.3 },
+      userId,
     });
 
     if (!response) {

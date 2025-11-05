@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateTopicsRequestSchema, formatValidationError } from '@/lib/validation';
 import { z } from 'zod';
 import { withSecurity } from '@/lib/security-middleware';
-import { RATE_LIMITS } from '@/lib/rate-limiter';
 import { generateTopicsFromTranscript } from '@/lib/ai-processing';
+import { getUserIdFromRequest } from '@/lib/ai-client-adapter';
 
 
 async function handler(request: NextRequest) {
@@ -29,12 +29,16 @@ async function handler(request: NextRequest) {
 
     const { transcript, model, includeCandidatePool, excludeTopicKeys, videoInfo, mode } = validatedData;
 
+    // Get user ID for API key usage
+    const userId = await getUserIdFromRequest();
+
     // Use the shared function to generate topics
     const { topics, candidates } = await generateTopicsFromTranscript(transcript, model, {
       videoInfo,
       includeCandidatePool,
       excludeTopicKeys: new Set(excludeTopicKeys ?? []),
-      mode
+      mode,
+      userId,
     });
 
     return NextResponse.json({

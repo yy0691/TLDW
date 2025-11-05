@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { decryptApiKey } from './api-key-encryption';
 import { createClient } from './supabase/server';
 
-export type AIProvider = 'google' | 'openai';
+export type AIProvider = 'google' | 'openai' | 'custom';
 
 export interface AIClientConfig {
   provider?: AIProvider;
@@ -13,6 +13,8 @@ export interface AIClientConfig {
   temperature?: number;
   maxTokens?: number;
   userId?: string;
+  baseUrl?: string; // Custom base URL for OpenAI-compatible APIs
+  customProvider?: string; // Actual provider identifier for custom providers
 }
 
 // Default models for each provider
@@ -28,13 +30,19 @@ const GOOGLE_MODEL_CASCADE = [
   'gemini-2.5-pro',
 ] as const;
 
-async function getUserApiKey(userId: string, provider: AIProvider): Promise<string | null> {
+interface UserApiKeyData {
+  apiKey: string;
+  baseUrl?: string;
+  modelName?: string;
+}
+
+async function getUserApiKey(userId: string, provider: string): Promise<UserApiKeyData | null> {
   try {
     const supabase = await createClient();
     
     const { data, error } = await supabase
       .from('user_api_keys')
-      .select('api_key_encrypted, is_active')
+      .select('api_key_encrypted, base_url, model_name, is_active')
       .eq('user_id', userId)
       .eq('provider', provider)
       .eq('is_active', true)
@@ -44,7 +52,12 @@ async function getUserApiKey(userId: string, provider: AIProvider): Promise<stri
       return null;
     }
     
-    return decryptApiKey(data.api_key_encrypted);
+    const apiKey = decryptApiKey(data.api_key_encrypted);
+    return {
+      apiKey,
+      baseUrl: data.base_url || undefined,
+      modelName: data.model_name || undefined,
+    };
   } catch (error) {
     console.error('Error fetching user API key:', error);
     return null;
@@ -64,35 +77,46 @@ function getServerApiKey(provider: AIProvider): string | null {
 export async function createAIClient(config: AIClientConfig = {}): Promise<LanguageModel> {
   const provider = config.provider || 'google';
   const userId = config.userId;
+  const customProvider = config.customProvider || provider;
   
   // Try to get user's API key first, fallback to server key
   let apiKey: string | null = null;
+  let baseUrl: string | undefined = config.baseUrl;
+  let modelName: string | undefined = config.model;
   
   if (userId) {
-    apiKey = await getUserApiKey(userId, provider);
+    const userData = await getUserApiKey(userId, customProvider);
+    if (userData) {
+      apiKey = userData.apiKey;
+      // Use user's custom settings if available
+      if (userData.baseUrl) baseUrl = userData.baseUrl;
+      if (userData.modelName) modelName = userData.modelName;
+    }
+  }
+  
+  if (!apiKey && provider !== 'custom') {
+    apiKey = getServerApiKey(provider as 'google' | 'openai');
   }
   
   if (!apiKey) {
-    apiKey = getServerApiKey(provider);
+    throw new Error(`No API key available for provider: ${customProvider}`);
   }
   
-  if (!apiKey) {
-    throw new Error(`No API key available for provider: ${provider}`);
-  }
-  
-  const model = config.model || DEFAULT_MODELS[provider];
+  const model = modelName || config.model || (provider === 'google' ? DEFAULT_MODELS.google : DEFAULT_MODELS.openai);
   
   if (provider === 'google') {
     const google = createGoogleGenerativeAI({ apiKey });
     return google(model);
   }
   
-  if (provider === 'openai') {
-    const openai = createOpenAI({ apiKey });
-    return openai(model);
+  // For OpenAI and custom providers (OpenAI-compatible)
+  const openaiConfig: any = { apiKey };
+  if (baseUrl) {
+    openaiConfig.baseURL = baseUrl;
   }
   
-  throw new Error(`Unsupported provider: ${provider}`);
+  const openai = createOpenAI(openaiConfig);
+  return openai(model);
 }
 
 export interface GenerateWithAIOptions {
