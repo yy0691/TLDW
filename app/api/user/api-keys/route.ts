@@ -122,8 +122,21 @@ export async function POST(request: NextRequest) {
     
     if (error) {
       console.error('Error saving API key:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      
+      // Provide more helpful error messages
+      let errorMessage = 'Failed to save API key';
+      if (error.message?.includes('constraint') || error.message?.includes('check')) {
+        errorMessage = 'Database constraint error. Please ensure the migrations have been run. Check the console for details.';
+      } else if (error.code === '23505') {
+        errorMessage = 'An API key for this provider already exists';
+      }
+      
       return NextResponse.json(
-        { error: 'Failed to save API key' },
+        { 
+          error: errorMessage,
+          details: error.message 
+        },
         { status: 500 }
       );
     }

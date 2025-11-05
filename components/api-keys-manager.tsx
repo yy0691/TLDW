@@ -158,7 +158,10 @@ export default function ApiKeysManager() {
       
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || 'Failed to save API key')
+        const errorMessage = error.details 
+          ? `${error.error}\n\nDetails: ${error.details}`
+          : error.error || 'Failed to save API key'
+        throw new Error(errorMessage)
       }
       
       const providerName = selectedProvider === 'custom' ? customProviderName : PROVIDER_INFO[selectedProvider].name

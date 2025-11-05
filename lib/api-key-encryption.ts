@@ -1,9 +1,14 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 
 // Use a 32-byte key for AES-256
+if (!process.env.API_KEY_ENCRYPTION_SECRET) {
+  console.warn('⚠️  API_KEY_ENCRYPTION_SECRET is not set! API key encryption will use a temporary key.');
+  console.warn('⚠️  Generate a secret using: npm run generate-key');
+}
+
 const ENCRYPTION_KEY = process.env.API_KEY_ENCRYPTION_SECRET 
   ? Buffer.from(process.env.API_KEY_ENCRYPTION_SECRET, 'hex')
-  : randomBytes(32); // Fallback for development
+  : randomBytes(32); // Fallback for development (WARNING: temporary key!)
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
