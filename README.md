@@ -127,9 +127,11 @@ Create `.env.local` in the repo root:
 ### 3. Supabase Setup
 
 1. Run SQL migrations in `supabase/migrations/` using the Supabase SQL editor or CLI.
-2. Ensure the following tables exist (structure documented in `CLAUDE.md`): `video_analyses`, `user_videos`, `user_notes`, `profiles`, and `rate_limits`.
+2. Ensure the following tables exist (structure documented in `CLAUDE.md`): `video_analyses`, `user_videos`, `user_notes`, `profiles`, `rate_limits`, and `user_api_keys`.
 3. Add the Postgres function `upsert_video_analysis_with_user_link` that stores analyses and links them to a user in `user_videos` (the production project contains the reference implementation—export it or recreate it before local testing).
 4. Enable email OTP/auth providers required by your login flow and configure redirect URLs to match `NEXT_PUBLIC_APP_URL`.
+
+> **Important:** If you encounter a 500 error when saving API keys, see `docs/TROUBLESHOOTING_API_KEYS.md` for migration troubleshooting steps.
 
 ### 4. Run the App
 
