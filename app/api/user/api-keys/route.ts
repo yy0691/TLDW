@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { encryptApiKey, getApiKeyPreview } from '@/lib/api-key-encryption';
 
 // GET - Fetch user's API keys (masked)
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient();
     
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     
     const { data: apiKeys, error } = await supabase
       .from('user_api_keys')
-      .select('id, provider, api_key_preview, is_active, created_at, updated_at')
+      .select('id, provider, provider_name, api_key_preview, base_url, model_name, is_active, created_at, updated_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
     
     const body = await request.json();
-    const { provider, apiKey } = body;
+    const { provider, apiKey, baseUrl, modelName, providerName } = body;
     
     if (!provider || !apiKey) {
       return NextResponse.json(
@@ -65,9 +65,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    if (!['google', 'openai'].includes(provider)) {
+    // Validate provider string
+    if (typeof provider !== 'string' || provider.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Invalid provider. Must be "google" or "openai"' },
+        { error: 'Invalid provider format' },
         { status: 400 }
       );
     }
@@ -80,22 +81,43 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // For custom providers, require baseUrl and modelName
+    if (provider === 'custom' && (!baseUrl || !modelName)) {
+      return NextResponse.json(
+        { error: 'Custom providers require baseUrl and modelName' },
+        { status: 400 }
+      );
+    }
+    
     const encryptedKey = encryptApiKey(apiKey);
     const preview = getApiKeyPreview(apiKey);
     
+    const upsertData: any = {
+      user_id: user.id,
+      provider,
+      api_key_encrypted: encryptedKey,
+      api_key_preview: preview,
+      is_active: true,
+      updated_at: new Date().toISOString(),
+    };
+    
+    // Add optional fields for custom providers
+    if (baseUrl) {
+      upsertData.base_url = baseUrl;
+    }
+    if (modelName) {
+      upsertData.model_name = modelName;
+    }
+    if (providerName) {
+      upsertData.provider_name = providerName;
+    }
+    
     const { data, error } = await supabase
       .from('user_api_keys')
-      .upsert({
-        user_id: user.id,
-        provider,
-        api_key_encrypted: encryptedKey,
-        api_key_preview: preview,
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      }, {
+      .upsert(upsertData, {
         onConflict: 'user_id,provider',
       })
-      .select('id, provider, api_key_preview, is_active, created_at, updated_at')
+      .select('id, provider, provider_name, api_key_preview, base_url, model_name, is_active, created_at, updated_at')
       .single();
     
     if (error) {

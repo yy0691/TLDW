@@ -14,15 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-
-interface ApiKey {
-  id: string
-  provider: 'google' | 'openai'
-  api_key_preview: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
+import type { UserApiKey } from '@/lib/types'
 
 const PROVIDER_INFO = {
   google: {
@@ -35,17 +27,37 @@ const PROVIDER_INFO = {
     getKeyUrl: 'https://platform.openai.com/api-keys',
     description: 'Alternative AI provider for video analysis',
   },
+  custom: {
+    name: 'Custom Provider',
+    getKeyUrl: '',
+    description: 'Use any OpenAI-compatible API (DeepSeek, Zhipu, Qwen, etc.)',
+  },
 }
 
+// Common Chinese AI providers
+const PRESET_PROVIDERS = [
+  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', defaultModel: 'deepseek-chat' },
+  { id: 'zhipu', name: 'Zhipu AI (智谱)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', defaultModel: 'glm-4' },
+  { id: 'qwen', name: 'Alibaba Qwen (通义千问)', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', defaultModel: 'qwen-plus' },
+  { id: 'moonshot', name: 'Moonshot AI (月之暗面)', baseUrl: 'https://api.moonshot.cn/v1', defaultModel: 'moonshot-v1-8k' },
+  { id: 'doubao', name: 'ByteDance Doubao (豆包)', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', defaultModel: 'doubao-pro-32k' },
+]
+
 export default function ApiKeysManager() {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([])
+  const [apiKeys, setApiKeys] = useState<UserApiKey[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   
-  const [selectedProvider, setSelectedProvider] = useState<'google' | 'openai'>('google')
+  const [selectedProvider, setSelectedProvider] = useState<'google' | 'openai' | 'custom'>('google')
   const [newApiKey, setNewApiKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
+  
+  // Custom provider fields
+  const [customProviderName, setCustomProviderName] = useState('')
+  const [customBaseUrl, setCustomBaseUrl] = useState('')
+  const [customModel, setCustomModel] = useState('')
+  const [selectedPreset, setSelectedPreset] = useState<string>('')
 
   useEffect(() => {
     fetchApiKeys()
@@ -61,12 +73,37 @@ export default function ApiKeysManager() {
       }
       
       const data = await response.json()
-      setApiKeys(data.apiKeys || [])
+      console.log('Fetched API keys:', data)
+      
+      // Transform the data to match UserApiKey interface
+      const transformedKeys: UserApiKey[] = (data.apiKeys || []).map((key: any) => ({
+        id: key.id,
+        provider: key.provider,
+        providerName: key.provider_name,
+        apiKeyPreview: key.api_key_preview,
+        baseUrl: key.base_url,
+        modelName: key.model_name,
+        isActive: key.is_active,
+        createdAt: key.created_at,
+        updatedAt: key.updated_at,
+      }))
+      
+      setApiKeys(transformedKeys)
     } catch (error) {
       console.error('Error fetching API keys:', error)
       toast.error('Failed to load API keys')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handlePresetChange = (presetId: string) => {
+    setSelectedPreset(presetId)
+    const preset = PRESET_PROVIDERS.find(p => p.id === presetId)
+    if (preset) {
+      setCustomProviderName(preset.name)
+      setCustomBaseUrl(preset.baseUrl)
+      setCustomModel(preset.defaultModel)
     }
   }
 
@@ -81,18 +118,42 @@ export default function ApiKeysManager() {
       return
     }
 
+    // Validate custom provider fields
+    if (selectedProvider === 'custom') {
+      if (!customProviderName.trim()) {
+        toast.error('Please enter a provider name')
+        return
+      }
+      if (!customBaseUrl.trim()) {
+        toast.error('Please enter a base URL')
+        return
+      }
+      if (!customModel.trim()) {
+        toast.error('Please enter a model name')
+        return
+      }
+    }
+
     try {
       setSaving(true)
+      
+      const requestBody: any = {
+        provider: selectedProvider === 'custom' ? selectedPreset || 'custom' : selectedProvider,
+        apiKey: newApiKey,
+      }
+
+      if (selectedProvider === 'custom') {
+        requestBody.providerName = customProviderName
+        requestBody.baseUrl = customBaseUrl
+        requestBody.modelName = customModel
+      }
       
       const response = await fetch('/api/user/api-keys', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          provider: selectedProvider,
-          apiKey: newApiKey,
-        }),
+        body: JSON.stringify(requestBody),
       })
       
       if (!response.ok) {
@@ -100,8 +161,13 @@ export default function ApiKeysManager() {
         throw new Error(error.error || 'Failed to save API key')
       }
       
-      toast.success(`${PROVIDER_INFO[selectedProvider].name} API key saved successfully!`)
+      const providerName = selectedProvider === 'custom' ? customProviderName : PROVIDER_INFO[selectedProvider].name
+      toast.success(`${providerName} API key saved successfully!`)
       setNewApiKey('')
+      setCustomProviderName('')
+      setCustomBaseUrl('')
+      setCustomModel('')
+      setSelectedPreset('')
       fetchApiKeys()
     } catch (error) {
       console.error('Error saving API key:', error)
@@ -112,7 +178,10 @@ export default function ApiKeysManager() {
   }
 
   const handleDeleteApiKey = async (provider: string) => {
-    if (!confirm(`Are you sure you want to delete your ${PROVIDER_INFO[provider as keyof typeof PROVIDER_INFO].name} API key?`)) {
+    const keyToDelete = apiKeys.find(k => k.provider === provider)
+    const displayName = keyToDelete?.providerName || keyToDelete?.provider || 'this'
+    
+    if (!confirm(`Are you sure you want to delete your ${displayName} API key?`)) {
       return
     }
 
@@ -137,7 +206,12 @@ export default function ApiKeysManager() {
     }
   }
 
-  const existingKey = apiKeys.find(key => key.provider === selectedProvider)
+  const existingKey = apiKeys.find(key => {
+    if (selectedProvider === 'custom') {
+      return key.provider === (selectedPreset || 'custom')
+    }
+    return key.provider === selectedProvider
+  })
 
   return (
     <Card className="overflow-hidden">
@@ -160,28 +234,97 @@ export default function ApiKeysManager() {
         <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
           <div className="space-y-2">
             <Label htmlFor="provider">AI Provider</Label>
-            <Select value={selectedProvider} onValueChange={(v) => setSelectedProvider(v as 'google' | 'openai')}>
+            <Select value={selectedProvider} onValueChange={(v) => {
+              setSelectedProvider(v as 'google' | 'openai' | 'custom')
+              setSelectedPreset('')
+              setCustomProviderName('')
+              setCustomBaseUrl('')
+              setCustomModel('')
+            }}>
               <SelectTrigger id="provider">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="google">Google Gemini</SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
+                <SelectItem value="custom">Custom Provider (中国大模型)</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{PROVIDER_INFO[selectedProvider].description}</span>
-              <a
-                href={PROVIDER_INFO[selectedProvider].getKeyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                Get API Key
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              {PROVIDER_INFO[selectedProvider].getKeyUrl && (
+                <a
+                  href={PROVIDER_INFO[selectedProvider].getKeyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  Get API Key
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
             </div>
           </div>
+
+          {/* Custom Provider Preset Selection */}
+          {selectedProvider === 'custom' && (
+            <div className="space-y-2">
+              <Label htmlFor="preset">Select Provider (Optional)</Label>
+              <Select value={selectedPreset} onValueChange={handlePresetChange}>
+                <SelectTrigger id="preset">
+                  <SelectValue placeholder="Choose a preset or enter custom..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_PROVIDERS.map(preset => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Custom Provider Fields */}
+          {selectedProvider === 'custom' && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="providerName">Provider Name</Label>
+                <Input
+                  id="providerName"
+                  type="text"
+                  value={customProviderName}
+                  onChange={(e) => setCustomProviderName(e.target.value)}
+                  placeholder="e.g., DeepSeek, Zhipu AI"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="baseUrl">Base URL</Label>
+                <Input
+                  id="baseUrl"
+                  type="text"
+                  value={customBaseUrl}
+                  onChange={(e) => setCustomBaseUrl(e.target.value)}
+                  placeholder="e.g., https://api.deepseek.com/v1"
+                />
+                <p className="text-xs text-muted-foreground">
+                  OpenAI-compatible API endpoint
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="modelName">Model Name</Label>
+                <Input
+                  id="modelName"
+                  type="text"
+                  value={customModel}
+                  onChange={(e) => setCustomModel(e.target.value)}
+                  placeholder="e.g., deepseek-chat, glm-4"
+                />
+              </div>
+            </>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="apiKey">API Key</Label>
@@ -210,7 +353,7 @@ export default function ApiKeysManager() {
             </div>
             {existingKey && (
               <p className="text-xs text-muted-foreground">
-                Current key: {existingKey.api_key_preview}
+                Current key: {existingKey.apiKeyPreview}
               </p>
             )}
           </div>
@@ -241,37 +384,52 @@ export default function ApiKeysManager() {
         ) : apiKeys.length > 0 ? (
           <div className="space-y-3">
             <Label className="text-sm font-medium">Your API Keys</Label>
-            {apiKeys.map((key) => (
-              <div
-                key={key.id}
-                className="flex items-center justify-between p-3 rounded-lg border bg-card"
-              >
-                <div className="flex-1">
-                  <div className="font-medium text-sm">
-                    {PROVIDER_INFO[key.provider].name}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {key.api_key_preview}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Added {new Date(key.created_at).toLocaleDateString()}
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteApiKey(key.provider)}
-                  disabled={deleting === key.provider}
-                  className="text-destructive hover:text-destructive"
+            {apiKeys.map((key) => {
+              const displayName = key.providerName || 
+                                 (PROVIDER_INFO[key.provider as keyof typeof PROVIDER_INFO]?.name) || 
+                                 key.provider
+              return (
+                <div
+                  key={key.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
                 >
-                  {deleting === key.provider ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            ))}
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">
+                      {displayName}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {key.apiKeyPreview}
+                    </div>
+                    {key.baseUrl && (
+                      <div className="text-xs text-muted-foreground">
+                        URL: {key.baseUrl}
+                      </div>
+                    )}
+                    {key.modelName && (
+                      <div className="text-xs text-muted-foreground">
+                        Model: {key.modelName}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted-foreground">
+                      Added {new Date(key.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteApiKey(key.provider)}
+                    disabled={deleting === key.provider}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    {deleting === key.provider ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="text-center py-8 text-sm text-muted-foreground">
@@ -286,6 +444,9 @@ export default function ApiKeysManager() {
         </p>
         <p>
           If no API key is set, the server&apos;s default API keys will be used (subject to rate limits).
+        </p>
+        <p>
+          <strong>Custom Providers:</strong> Supports any OpenAI-compatible API. Popular Chinese providers include DeepSeek, Zhipu AI, Alibaba Qwen, Moonshot, and ByteDance Doubao.
         </p>
       </CardFooter>
     </Card>

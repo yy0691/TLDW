@@ -16,6 +16,7 @@ interface GeminiModelConfig {
   preferredModel?: string;
   timeoutMs?: number;
   zodSchema?: z.ZodType<any>;
+  userId?: string; // User ID for using user's API keys
 }
 
 function isValidModel(model: string): model is ValidModel {
@@ -117,6 +118,37 @@ export async function generateWithFallback(
   prompt: string,
   config: GeminiModelConfig = {}
 ): Promise<string> {
+  // If userId is provided, use the new AI client which supports user API keys
+  if (config.userId) {
+    try {
+      const { generateWithAI } = await import('./ai-client');
+      
+      const result = await generateWithAI({
+        prompt,
+        config: {
+          provider: 'google',
+          model: config.preferredModel,
+          temperature: config.generationConfig?.temperature,
+          maxTokens: config.generationConfig?.maxOutputTokens,
+          userId: config.userId,
+        },
+        schema: config.zodSchema,
+      });
+      
+      // If schema is provided, result will be an object, convert to JSON string
+      if (config.zodSchema) {
+        return JSON.stringify(result);
+      }
+      
+      return result as string;
+    } catch (error) {
+      console.error('Error using AI client with user key:', error);
+      // Fall back to server keys
+      console.log('Falling back to server API keys...');
+    }
+  }
+  
+  // Original implementation using server API keys
   if (config.preferredModel && !isValidModel(config.preferredModel)) {
     console.warn(`Invalid preferredModel "${config.preferredModel}", using default cascade`);
   }

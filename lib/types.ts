@@ -165,3 +165,18 @@ export interface PlaybackCommand {
   citations?: Citation[];
   autoPlay?: boolean;
 }
+
+// API Key types for user-managed AI provider keys
+export type AIProviderType = 'google' | 'openai' | 'custom';
+
+export interface UserApiKey {
+  id: string;
+  provider: string; // Identifier (e.g., 'google', 'openai', 'deepseek', 'zhipu')
+  providerName?: string | null; // Display name (e.g., 'DeepSeek', 'Zhipu AI')
+  apiKeyPreview: string;
+  baseUrl?: string | null; // Custom API base URL for OpenAI-compatible endpoints
+  modelName?: string | null; // Custom model name
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
