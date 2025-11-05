@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 interface LocalVideoUploadProps {
-  onUploadComplete: (videoId: string, transcript: any[]) => void;
+  onUploadComplete: (videoId: string, transcript: any[], videoAnalysisId?: string) => void;
 }
 
 export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
@@ -125,6 +125,15 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
       const videoData = await videoResponse.json();
       setUploadProgress(60);
 
+      // Store videoAnalysisId for later use
+      if (videoData.videoAnalysisId) {
+        try {
+          sessionStorage.setItem(`video_analysis_id_${videoData.videoId}`, videoData.videoAnalysisId);
+        } catch (error) {
+          console.error('Failed to store videoAnalysisId:', error);
+        }
+      }
+
       let transcript;
 
       if (subtitleFile) {
@@ -168,8 +177,8 @@ export function LocalVideoUpload({ onUploadComplete }: LocalVideoUploadProps) {
 
       setUploadProgress(100);
 
-      // Call completion handler
-      onUploadComplete(videoData.videoId, transcript);
+      // Call completion handler with videoAnalysisId
+      onUploadComplete(videoData.videoId, transcript, videoData.videoAnalysisId);
 
       // Reset form
       setVideoFile(null);

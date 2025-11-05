@@ -670,8 +670,8 @@ export default function AnalyzePage() {
             transcriptData = { transcript: JSON.parse(storedTranscript) };
             console.log('[Local Video] Loaded transcript from sessionStorage');
             
-            // Clean up sessionStorage after reading
-            sessionStorage.removeItem(`transcript_${extractedVideoId}`);
+            // Don't remove transcript yet - keep it until analysis is successfully saved
+            // This allows page refresh and retry if save fails
           } else {
             throw new Error("No transcript found for this local video. Please upload the video with subtitles again.");
           }
@@ -1001,6 +1001,12 @@ export default function AnalyzePage() {
             const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
             const message = buildApiErrorMessage(errorData, "Failed to save analysis");
             throw new Error(message);
+          }
+
+          // Clean up sessionStorage after successful save (for local videos)
+          if (isLocalVideo) {
+            sessionStorage.removeItem(`transcript_${extractedVideoId}`);
+            console.log('[Local Video] Cleaned up transcript from sessionStorage after successful save');
           }
         },
         (error) => {

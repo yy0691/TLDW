@@ -16,7 +16,7 @@ async function handler(req: NextRequest) {
 
     const supabase = await createClient();
 
-    // Get video analysis by youtube_id
+    // Unified query for both local and remote videos
     const { data: videoAnalysis, error } = await supabase
       .from('video_analyses')
       .select('id')

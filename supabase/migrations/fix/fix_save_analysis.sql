@@ -79,7 +79,8 @@ BEGIN
       accessed_at = NOW();
   END IF;
 
-  RETURN QUERY SELECT v_video_id, v_is_new;
+  -- Return results with explicit aliases to avoid ambiguity
+  RETURN QUERY SELECT v_video_id AS video_id, v_is_new AS is_new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

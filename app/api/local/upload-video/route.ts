@@ -104,8 +104,56 @@ async function handler(request: NextRequest) {
     // Get video duration (we'll need this from the client side)
     const duration = parseInt(formData.get('duration') as string) || null;
 
+    // Create video_analyses record for local video
+    const { data: videoAnalysis, error: insertError } = await supabase
+      .from('video_analyses')
+      .insert({
+        youtube_id: videoId,
+        title: title,
+        author: author,
+        duration: duration || 0,
+        thumbnail_url: null,
+        transcript: [],  // NOT NULL field, use empty array
+        topics: [],      // NOT NULL field, use empty array
+        summary: null,
+        model_used: null
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      console.error('Failed to create video analysis record:', insertError);
+      console.error('Insert error details:', JSON.stringify(insertError, null, 2));
+      return NextResponse.json(
+        {
+          error: 'Failed to save video metadata',
+          details: insertError.message,
+          code: insertError.code,
+          hint: insertError.hint
+        },
+        { status: 500 }
+      );
+    }
+
+    // If user is logged in, link video to user
+    if (user) {
+      const { error: linkError } = await supabase
+        .from('user_videos')
+        .insert({
+          user_id: user.id,
+          video_id: videoAnalysis.id,
+          accessed_at: new Date().toISOString()
+        });
+
+      if (linkError) {
+        console.error('Failed to link video to user:', linkError);
+        // Don't fail the request, just log the error
+      }
+    }
+
     return NextResponse.json({
       videoId,
+      videoAnalysisId: videoAnalysis.id,
       title,
       author,
       url: publicUrl,

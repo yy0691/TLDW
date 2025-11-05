@@ -133,10 +133,13 @@ function HomeContent() {
   );
 
   const handleLocalUploadComplete = useCallback(
-    (videoId: string, transcript: any[]) => {
+    (videoId: string, transcript: any[], videoAnalysisId?: string) => {
       // Store transcript in sessionStorage for the analyze page
       try {
         sessionStorage.setItem(`transcript_${videoId}`, JSON.stringify(transcript));
+        if (videoAnalysisId) {
+          sessionStorage.setItem(`video_analysis_id_${videoId}`, videoAnalysisId);
+        }
       } catch (error) {
         console.error('Failed to store transcript:', error);
       }

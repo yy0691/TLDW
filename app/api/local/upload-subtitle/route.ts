@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseSubtitle, isValidSubtitleFormat } from '@/lib/subtitle-parser';
 import { withSecurity, SECURITY_PRESETS } from '@/lib/security-middleware';
+import { createClient } from '@/lib/supabase/server';
 
 async function handler(request: NextRequest) {
   try {
@@ -41,6 +42,18 @@ async function handler(request: NextRequest) {
         { error: 'Failed to parse subtitle file or file is empty' },
         { status: 400 }
       );
+    }
+
+    // Update video_analyses with transcript
+    const supabase = await createClient();
+    const { error: updateError } = await supabase
+      .from('video_analyses')
+      .update({ transcript })
+      .eq('youtube_id', videoId);
+
+    if (updateError) {
+      console.error('Failed to update transcript in database:', updateError);
+      // Don't fail the request, transcript is still returned to frontend
     }
 
     return NextResponse.json({
