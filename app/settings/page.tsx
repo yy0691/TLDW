@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
+import { unstable_noStore as noStore } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import SettingsForm from './settings-form'
 
 export default async function SettingsPage() {
+  noStore(); // Prevent static generation
   const supabase = await createClient()
 
   const {

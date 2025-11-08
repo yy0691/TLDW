@@ -27,28 +27,17 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  try {
-    const { error } = await supabase.auth.getUser()
+  // Silently refresh the session - no need to check for errors
+  // This will automatically refresh the token if it's valid
+  // Only attempt auth check if there are auth cookies present
+  const hasAuthCookies = request.cookies.getAll().some(
+    cookie => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token')
+  )
 
-    if (error) {
-      console.warn('Auth token refresh failed:', error.message)
-
-      if (error.message?.includes('refresh_token_not_found') ||
-          error.message?.includes('Invalid Refresh Token')) {
-        const authCookies = request.cookies.getAll().filter(
-          cookie => cookie.name.startsWith('sb-') &&
-                   (cookie.name.includes('auth-token') || cookie.name.includes('refresh-token'))
-        )
-
-        authCookies.forEach(cookie => {
-          supabaseResponse.cookies.delete(cookie.name)
-        })
-
-        console.log('Cleared invalid auth cookies')
-      }
-    }
-  } catch (error) {
-    console.error('Unexpected error in auth middleware:', error)
+  if (hasAuthCookies) {
+    await supabase.auth.getUser().catch(() => {
+      // Silently ignore errors
+    })
   }
 
   return supabaseResponse

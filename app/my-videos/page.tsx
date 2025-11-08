@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { unstable_noStore as noStore } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { VideoGrid } from './video-grid';
 
 export default async function MyVideosPage() {
+  noStore(); // Prevent static generation
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
